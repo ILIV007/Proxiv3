@@ -82,6 +82,8 @@ def _server_side(rp, client_req_body, n, d, server_nonce, new_nonce_holder):
     off += 8  # fingerprint
     enc, off = deep.parse_tl_string(body, off)
     block = pow(int.from_bytes(enc, "big"), d, n).to_bytes(256, "big")
+    if block[0] == 0:  # the legacy payload is 255 bytes; drop the pad zero
+        block = block[1:]
     # legacy padding: SHA1(inner) + inner + random tail
     digest, inner = block[:20], block[20:]
     assert struct.unpack("<I", inner[0:4])[0] == deep.P_Q_INNER
