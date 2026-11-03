@@ -25,6 +25,8 @@ ADMIN_IDS = "126679582,232514880"
 # @Proxiv3 channel — bot verified as administrator there on 2026-11-03.
 # Used by the channel autopost (same */30 tick, throttled below).
 CHANNEL_ID = "-1003532290946"
-CHANNEL_POST_MINUTES = "180"
+CHANNEL_POST_MINUTES = "60"
+SPONSOR_TEXT = "📣 Sponsor · @ILIVIR3"
+SPONSOR_URL = "https://t.me/ILIVIR3"
 
 # Secrets (never commit): wrangler secret put BOT_TOKEN / WEBHOOK_SECRET / SYNC_SECRET
