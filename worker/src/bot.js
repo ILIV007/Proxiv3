@@ -1,26 +1,27 @@
 // Bot update handling. State lives in KV (pool + per-user recents + rate
 // limits) and, when bound, D1 (users + votes). Everything fails soft:
 // no KV pool yet -> friendly "syncing" reply; no D1 -> votes are skipped.
+// UI language: English by design (Iliya's call, 2026-11-03 — the bot sends
+// little text, and proxy channels are an English-format world).
 
 import { flag, tmeLink, tgLink, dependencyRatio } from "./pool.js";
 import { sendMessage, editMessageText, answerCallback } from "./telegram.js";
 import { syncPool } from "./sync.js";
 
-const TYPE_FA = { classic: "کلاسیک", secure: "امن (dd)", faketls: "FakeTLS (ee)" };
 const WARNING =
-  "⚠️ پروکسی‌های عمومی رایگان‌اند و اپراتور هر پروکسی آی‌پی شما را می‌بیند و ممکن است کانال تبلیغاتی نشان دهد. برای حساب‌های حساس استفاده نکنید.";
+  "⚠️ Public proxies are free, and each operator can see your IP and may inject sponsored channels. Do not use them for sensitive accounts.";
 
 export function poolAgeText(pool, now = Date.now()) {
-  if (!pool?.updated_unix) return "هنوز همگام‌سازی نشده";
+  if (!pool?.updated_unix) return "not synced yet";
   const mins = Math.max(0, Math.round(now / 1000 / 60 - pool.updated_unix / 60));
-  if (mins < 60) return `${mins} دقیقه پیش به‌روز شده`;
-  return `${Math.floor(mins / 60)} ساعت و ${mins % 60} دقیقه پیش به‌روز شده`;
+  if (mins < 60) return `updated ${mins} min ago`;
+  return `updated ${Math.floor(mins / 60)}h ${mins % 60}m ago`;
 }
 
 export function menuText(pool) {
   const head = pool
-    ? `🛡 <b>Proxiv3</b> — پروکسی‌های MTProto تأییدشده\n📦 استخر فعلی: <b>${pool.count}</b> سرور · ${poolAgeText(pool)}`
-    : "🛡 <b>Proxiv3</b>\n⏳ استخر در حال همگام‌سازی است؛ یک دقیقه دیگر دوباره تلاش کنید.";
+    ? `🛡 <b>Proxiv3</b> — verified MTProto proxies\n📦 Current pool: <b>${pool.count}</b> servers · ${poolAgeText(pool)}`
+    : "🛡 <b>Proxiv3</b>\n⏳ The pool is still syncing — try again in a minute.";
   return `${head}\n\n${WARNING}`;
 }
 
@@ -28,41 +29,41 @@ export function mainKeyboard() {
   return {
     inline_keyboard: [
       [
-        { text: "🎲 پروکسی تصادفی", callback_data: "t:all" },
-        { text: "🛡 پایدارترین‌ها", callback_data: "t:stable" },
+        { text: "🎲 Random proxy", callback_data: "t:all" },
+        { text: "🛡 Most stable", callback_data: "t:stable" },
       ],
       [
-        { text: "⚡ سریع‌ترین‌ها", callback_data: "t:fast" },
+        { text: "⚡ Fastest", callback_data: "t:fast" },
         { text: "🎭 FakeTLS", callback_data: "t:faketls" },
       ],
-      [{ text: "🌍 بر اساس کشور", callback_data: "cc" }],
+      [{ text: "🌍 By country", callback_data: "cc" }],
     ],
   };
 }
 
 export function cardText(p, votes = { up: 0, down: 0 }) {
   const lines = [
-    `${flag(p.country)} <b>پروکسی MTProto</b> · ${p.country ?? "—"}`,
-    `🔐 نوع: ${TYPE_FA[p.type] ?? p.type}`,
+    `${flag(p.country)} <b>MTProto Proxy</b> · ${p.country ?? "—"}`,
+    `🔐 Type: ${p.type}`,
   ];
-  if (p.asn_org) lines.push(`🏢 اپراتور: ${escapeHtml(p.asn_org)}`);
-  if (p.uptime != null) lines.push(`📈 آپتایم تأیید ما: ${Math.round(p.uptime * 100)}٪ (${p.checks} چک)`);
-  if (p.rtt_ms != null) lines.push(`⏱ پینگ از رانر ما: ${p.rtt_ms}ms`);
-  if (votes.up || votes.down) lines.push(`🗳 بازخورد کاربران: 👍 ${votes.up} · 👎 ${votes.down}`);
-  lines.push("", `👇 برای اتصال دکمه‌ی زیر را بزنید، یا لینک را کپی کنید:`, `<code>${tgLink(p)}</code>`);
+  if (p.asn_org) lines.push(`🏢 Operator: ${escapeHtml(p.asn_org)}`);
+  if (p.uptime != null) lines.push(`📈 Our verified uptime: ${Math.round(p.uptime * 100)}% (${p.checks} checks)`);
+  if (p.rtt_ms != null) lines.push(`⏱ Ping from our runner: ${p.rtt_ms}ms`);
+  if (votes.up || votes.down) lines.push(`🗳 User feedback: 👍 ${votes.up} · 👎 ${votes.down}`);
+  lines.push("", `👇 Tap the button below to connect, or copy the link:`, `<code>${tgLink(p)}</code>`);
   return lines.join("\n");
 }
 
 export function cardKeyboard(p, scope) {
   return {
     inline_keyboard: [
-      [{ text: "🚀 اتصال به پروکسی", url: tmeLink(p) }],
+      [{ text: "🚀 Connect to proxy", url: tmeLink(p), style: "primary" }],
       [
-        { text: "👍 کار کرد", callback_data: `v:+:${p.key}` },
-        { text: "👎 کار نکرد", callback_data: `v:-:${p.key}` },
-        { text: "⏭ بعدی", callback_data: `n:${scope}` },
+        { text: "👍 Works", callback_data: `v:+:${p.key}` },
+        { text: "👎 Dead", callback_data: `v:-:${p.key}` },
+        { text: "⏭ Next", callback_data: `n:${scope}` },
       ],
-      [{ text: "🏠 منوی اصلی", callback_data: "m" }],
+      [{ text: "🏠 Main menu", callback_data: "m" }],
     ],
   };
 }
@@ -122,7 +123,7 @@ async function serve(env, chatId, uid, scope) {
   else if (scope === "all") keys = Object.keys(pool.proxies);
   else keys = pool.tiers[scope] ?? [];
   const key = await pickKey(env, uid, keys);
-  if (!key) return sendMessage(env, chatId, "در این دسته فعلاً پروکسی‌ای نیست؛ دسته‌ی دیگری را امتحان کنید.", { reply_markup: mainKeyboard() });
+  if (!key) return sendMessage(env, chatId, "No proxies in this category right now — try another one.", { reply_markup: mainKeyboard() });
   const p = pool.proxies[key];
   return sendMessage(env, chatId, cardText(p, await voteCounts(env, key)), { reply_markup: cardKeyboard(p, scope) });
 }
@@ -153,10 +154,10 @@ export async function handleUpdate(env, update, ctx) {
       const pool = await getPool(env);
       const dep = pool ? Math.round(dependencyRatio(pool, "radikal") * 100) : "—";
       const text = pool
-        ? `🛠 <b>پنل Proxiv3</b>\n📦 سرورها: ${pool.count}\n🕐 ${poolAgeText(pool)}\n🔗 وابستگی به رادیکال: ${dep}٪\n📡 منبع فید: ${pool.source}`
-        : "🛠 استخر هنوز خالی است.";
+        ? `🛠 <b>Proxiv3 panel</b>\n📦 Servers: ${pool.count}\n🕐 ${poolAgeText(pool)}\n🔗 Radikal dependency: ${dep}%\n📡 Feed source: ${pool.source}`
+        : "🛠 The pool is still empty.";
       return void (await sendMessage(env, chatId, text, {
-        reply_markup: { inline_keyboard: [[{ text: "🔄 سینک فوری", callback_data: "a:sync" }]] },
+        reply_markup: { inline_keyboard: [[{ text: "🔄 Sync now", callback_data: "a:sync" }]] },
       }));
     }
     return;
@@ -166,7 +167,7 @@ export async function handleUpdate(env, update, ctx) {
     const chatId = cb.message.chat.id;
     const messageId = cb.message.message_id;
     const data = cb.data ?? "";
-    if (await rateLimited(env, uid)) return void (await answerCallback(env, cb.id, "کمی آرام‌تر! چند دقیقه دیگر تلاش کنید.", true));
+    if (await rateLimited(env, uid)) return void (await answerCallback(env, cb.id, "Slow down a bit — try again in a few minutes.", true));
     const done = async (text = "") => answerCallback(env, cb.id, text);
 
     if (data === "m") {
@@ -176,13 +177,13 @@ export async function handleUpdate(env, update, ctx) {
     }
     if (data === "cc") {
       const pool = await getPool(env);
-      if (!pool) return void (await done("استخر هنوز آماده نیست"));
+      if (!pool) return void (await done("The pool is not ready yet"));
       const top = Object.entries(pool.countries).sort((a, b) => b[1].length - a[1].length).slice(0, 12);
       const rows = [];
       for (let i = 0; i < top.length; i += 3)
         rows.push(top.slice(i, i + 3).map(([cc, ks]) => ({ text: `${flag(cc)} ${cc} (${ks.length})`, callback_data: `c:${cc}` })));
-      rows.push([{ text: "🏠 منوی اصلی", callback_data: "m" }]);
-      await editMessageText(env, chatId, messageId, "🌍 کشور را انتخاب کنید:", { reply_markup: { inline_keyboard: rows } });
+      rows.push([{ text: "🏠 Main menu", callback_data: "m" }]);
+      await editMessageText(env, chatId, messageId, "🌍 Pick a country:", { reply_markup: { inline_keyboard: rows } });
       return void (await done());
     }
     if (data.startsWith("t:")) {
@@ -200,12 +201,12 @@ export async function handleUpdate(env, update, ctx) {
     if (data.startsWith("v:")) {
       const [, sign, key] = data.split(":");
       await recordVote(env, uid, key, sign === "+" ? 1 : -1);
-      return void (await done(sign === "+" ? "ممنون! ثبت شد 👍" : "ثبت شد؛ بعدی را امتحان کنید 👎"));
+      return void (await done(sign === "+" ? "Thanks! Noted 👍" : "Noted — try the next one 👎"));
     }
     if (data === "a:sync") {
-      if (!isAdmin(env, uid)) return void (await done("دسترسی ندارید", true));
-      ctx?.waitUntil?.(syncPool(env).then((r) => sendMessage(env, chatId, r.ok ? `✅ سینک شد: ${r.count} سرور` : `❌ سینک ناموفق: ${r.error}`)));
-      return void (await done("سینک شروع شد…"));
+      if (!isAdmin(env, uid)) return void (await done("No access", true));
+      ctx?.waitUntil?.(syncPool(env).then((r) => sendMessage(env, chatId, r.ok ? `✅ Synced: ${r.count} servers` : `❌ Sync failed: ${r.error}`)));
+      return void (await done("Sync started…"));
     }
     return void (await done());
   }

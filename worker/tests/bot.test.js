@@ -33,13 +33,13 @@ const cbq = (data, uid = 7) => ({
   callback_query: { id: "q1", from: { id: uid }, message: { message_id: 5, chat: { id: 100 } }, data },
 });
 
-test("menu and card render in Persian with pool stats", () => {
+test("menu and card render in English with pool stats", () => {
   const pool = buildPool([normalizeProxy({
     server: "1.1.1.1", port: 443, secret: "dd" + "a".repeat(32), type: "secure",
     ip: "1.1.1.1", country: "IR", rtt_ms: 30, uptime: 1, checks: 9,
   }, "ours")]);
   assert.match(menuText(pool), /Proxiv3/);
-  assert.match(menuText(pool), /1<\/b> سرور/);
+  assert.match(menuText(pool), /1<\/b> servers/);
   assert.match(cardText(pool.proxies[Object.keys(pool.proxies)[0]]), /tg:\/\/proxy/);
 });
 
@@ -75,7 +75,7 @@ test("empty pool: /start still answers with the syncing menu", async () => {
   const env = { POOL: new FakeKV(), BOT_TOKEN: "test", ADMIN_IDS: "" };
   await handleUpdate(env, msg("/start"));
   const send = calls.find((c) => c.url.endsWith("/sendMessage"));
-  assert.match(send.body.text, /همگام‌سازی/);
+  assert.match(send.body.text, /still syncing/);
 });
 
 test("/admin is owner-only and shows the dependency metric", async () => {
@@ -84,5 +84,5 @@ test("/admin is owner-only and shows the dependency metric", async () => {
   assert.equal(calls.filter((c) => c.url.endsWith("/sendMessage")).length, 0);
   await handleUpdate(makeEnv(), msg("/admin", 42));
   const send = calls.find((c) => c.url.endsWith("/sendMessage"));
-  assert.match(send.body.text, /وابستگی به رادیکال: 0٪/);
+  assert.match(send.body.text, /Radikal dependency: 0%/);
 });

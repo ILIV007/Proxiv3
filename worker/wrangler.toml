@@ -23,7 +23,8 @@ PROVIDER_RADIKAL_ENABLED = "true"
 # OWN_FEED_URL = "https://raw.githubusercontent.com/ILIV007/Proxiv3/data/feed.json"
 ADMIN_IDS = ""
 # @Proxiv3 channel — bot verified as administrator there on 2026-11-03.
-# Used by the Phase-3 channel autopost (same */30 tick, Tehran dispatch).
+# Used by the channel autopost (same */30 tick, throttled below).
 CHANNEL_ID = "-1003532290946"
+CHANNEL_POST_MINUTES = "180"
 
 # Secrets (never commit): wrangler secret put BOT_TOKEN / WEBHOOK_SECRET / SYNC_SECRET

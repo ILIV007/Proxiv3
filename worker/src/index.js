@@ -4,6 +4,7 @@
 import { handleUpdate, getPool } from "./bot.js";
 import { syncPool } from "./sync.js";
 import { validateFeed } from "./pool.js";
+import { maybePostToChannel } from "./channel.js";
 
 const VERSION = "0.1.0";
 
@@ -53,6 +54,12 @@ export default {
   },
 
   async scheduled(_event, env, ctx) {
-    ctx.waitUntil(syncPool(env));
+    // One cron does both: refresh the pool, then (throttled) post to the
+    // channel. Channel posting never blocks a sync and fails soft.
+    ctx.waitUntil(
+      syncPool(env)
+        .then(() => maybePostToChannel(env))
+        .catch((e) => console.error("scheduled", e.message))
+    );
   },
 };
