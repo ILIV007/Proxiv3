@@ -80,7 +80,7 @@ def describe(pkt: bytes, st) -> str:
 
 
 async def attempt(item, variant) -> str:
-    name, salt_mode, key_mode, msgid_mode = variant
+    name = variant[0]
     secret = Secret.from_link(item["secret"])
     key16 = secret.key
     host = item.get("ip") or item["server"]
@@ -101,7 +101,7 @@ async def attempt(item, variant) -> str:
 
 
 async def _session(r, w, secret, key16, variant) -> str:
-    name, salt_mode, key_mode, msgid_mode = variant
+    name, salt_mode, key_mode, msgid_mode, inner_mode, pad_mode = variant
     tls = secret.emulate_tls
     if tls:
         hello, cdigest = build_client_hello(key16, secret.domain)
@@ -126,7 +126,8 @@ async def _session(r, w, secret, key16, variant) -> str:
                      if secret.use_random_padding else b"")
     await w.drain()
     rp = parse_res_pq(await conn.recv_body())
-    dh_body, st = build_req_dh_params(rp, 2)
+    dh_body, st = build_req_dh_params(
+        rp, 2, inner_dc_id=2 if inner_mode == "dc" else None)
     conn.send_plain(dh_body)
     await w.drain()
     set_client_body = handle_server_dh_params(await conn.recv_body(), st)
@@ -142,8 +143,13 @@ async def _session(r, w, secret, key16, variant) -> str:
     if msgid_mode == "local":
         st.server_time = int(time.time())
     payload, ping_id = build_ping_payload(st)
-    conn.send_packet(payload,
-                     os.urandom(16) if secret.use_random_padding else b"")
+    if pad_mode == "zero" or not secret.use_random_padding:
+        pad = b""
+    elif pad_mode == "rand":
+        pad = os.urandom(os.urandom(1)[0] % 16)
+    else:
+        pad = os.urandom(16)
+    conn.send_packet(payload, pad)
     await w.drain()
     seen = []
     for _ in range(4):
@@ -154,18 +160,28 @@ async def _session(r, w, secret, key16, variant) -> str:
             break
         d = describe(pkt, st)
         seen.append(d)
-        if d.startswith("pong"):
-            return f"{name}: PONG! after {seen}"
+        if "pong" in d:
+            return f"{name}: PONG! packets={seen}"
     return (f"{name}: keylen={len(st.auth_key)} salt={st.salt.hex()} "
             f"packets={seen}")
 
 
+# (name, salt, auth_key, msg_id, p_q_inner, ping transport pad)
 VARIANTS = [
-    ("V1-spec", "xor", "padded", "server"),
-    ("V2-salt0", "zero", "padded", "server"),
-    ("V3-telethon", "zero", "minimal", "server"),
-    ("V4-keymin", "xor", "minimal", "server"),
-    ("V5-localtime", "zero", "minimal", "local"),
+    ("V1-spec", "xor", "padded", "server", "plain", "std"),
+    ("V2-salt0", "zero", "padded", "server", "plain", "std"),
+    ("V3-telethon", "zero", "minimal", "server", "plain", "std"),
+    ("V4-keymin", "xor", "minimal", "server", "plain", "std"),
+    ("V5-localtime", "zero", "minimal", "local", "plain", "std"),
+]
+# dd/ee (MTG-fronted) variants: is the -404 about the ping's transport
+# padding, or about MTG not learning the key from a plain p_q_inner_data?
+W_VARIANTS = [
+    ("W1-base", "xor", "padded", "server", "plain", "std"),
+    ("W2-pad0", "xor", "padded", "server", "plain", "zero"),
+    ("W3-innerdc", "xor", "padded", "server", "dc", "std"),
+    ("W4-innerdc-pad0", "xor", "padded", "server", "dc", "zero"),
+    ("W5-padrand", "xor", "padded", "server", "plain", "rand"),
 ]
 
 
@@ -184,7 +200,7 @@ async def main() -> None:
         kind = ("ee" if item["secret"].startswith("ee")
                 else "dd" if item["secret"].startswith("dd") else "classic")
         print(f"DIAG {item['server']}:{item['port']} kind={kind}", flush=True)
-        for variant in VARIANTS:
+        for variant in (VARIANTS if kind == "classic" else W_VARIANTS):
             out = await attempt(item, variant)
             print(f"  {out}", flush=True)
             if "PONG!" in out:

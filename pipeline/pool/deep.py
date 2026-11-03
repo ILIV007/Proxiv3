@@ -261,6 +261,7 @@ def tmp_key_iv(new_nonce: bytes, server_nonce: bytes) -> tuple[bytes, bytes]:
 # ---------------------------------------------------------------- DH messages
 
 RES_PQ = 0x05162463
+P_Q_INNER_DC = 0xA9F55F95  # p_q_inner_data_dc: names the DC explicitly
 P_Q_INNER = 0x83C95AEC  # plain variant (no dc field): the _dc variant is
 # rejected (-444) whenever the DC actually reached through the proxy is
 # not the one named — and proxies route freely. Telethon's production
@@ -320,7 +321,8 @@ class DHState:
     session_id: bytes = b""
 
 
-def build_req_dh_params(rp: ResPQ, dc: int, rnd=os.urandom) -> tuple[bytes, DHState]:
+def build_req_dh_params(rp: ResPQ, dc: int, rnd=os.urandom,
+                        inner_dc_id: int | None = None) -> tuple[bytes, DHState]:
     pq = int.from_bytes(rp.pq_bytes, "big")
     p, q = factorize(pq)
     fp = next((f for f in rp.fingerprints if f in SERVER_KEYS), None)
@@ -329,11 +331,12 @@ def build_req_dh_params(rp: ResPQ, dc: int, rnd=os.urandom) -> tuple[bytes, DHSt
     n, e = SERVER_KEYS[fp]
     new_nonce = rnd(32)
     inner = (
-        struct.pack("<I", P_Q_INNER)
+        struct.pack("<I", P_Q_INNER_DC if inner_dc_id is not None else P_Q_INNER)
         + tl_string(rp.pq_bytes)
         + tl_string(p.to_bytes((p.bit_length() + 7) // 8, "big"))
         + tl_string(q.to_bytes((q.bit_length() + 7) // 8, "big"))
         + rp.nonce + rp.server_nonce + new_nonce
+        + (struct.pack("<i", inner_dc_id) if inner_dc_id is not None else b"")
     )
     encrypted = rsa_encrypt_legacy(inner, n, e, rnd)
     body = (
@@ -474,7 +477,10 @@ def find_pong(payload: bytes, st: DHState, ping_id: bytes) -> bool:
         return False
     ctor = struct.unpack("<I", body[0:4])[0]
     if ctor == PONG:
-        return body[4:12] == ping_id
+        # pong = ctor + msg_id(8, of our ping) + ping_id(8) — the ping_id
+        # is the SECOND long; comparing the first one cost us a full
+        # evening (it can never equal a random ping_id).
+        return len(body) >= 20 and body[12:20] == ping_id
     if ctor == MSG_CONTAINER:
         # inner messages: msg_id(8) + seq_no(4) + bytes(4) + body
         count = struct.unpack("<i", body[4:8])[0]
@@ -486,8 +492,8 @@ def find_pong(payload: bytes, st: DHState, ping_id: bytes) -> bool:
             if ilen < 0 or off + 16 + ilen > len(body):
                 break
             inner = body[off + 16:off + 16 + ilen]
-            if len(inner) >= 12 and struct.unpack("<I", inner[0:4])[0] == PONG \
-                    and inner[4:12] == ping_id:
+            if len(inner) >= 20 and struct.unpack("<I", inner[0:4])[0] == PONG \
+                    and inner[12:20] == ping_id:
                 return True
             off += 16 + ilen
     return False
