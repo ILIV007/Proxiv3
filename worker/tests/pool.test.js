@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   normalizeProxy, fromRadikal, mergeProxies, buildPool, validateFeed,
-  tmeLink, tgLink, flag, proxyKey, dependencyRatio, FEED_SCHEMA,
+  tmeLink, tgLink, flag, proxyKey, dependencyRatio, FEED_SCHEMA, eliteKeys,
 } from "../src/pool.js";
 
 const ROW = {
@@ -72,10 +72,38 @@ test("validateFeed accepts tgpool/1 and rejects anything else", () => {
   assert.equal(validateFeed(null), null);
 });
 
+test("validateFeed preserves sanitized per-row origins from our own feed", () => {
+  const feed = { schema: FEED_SCHEMA, proxies: [{ ...ROW, origins: ["tgmtproxy", "radikal", "bad origin!", 42] }] };
+  const pool = validateFeed(feed);
+  const p = pool.proxies[Object.keys(pool.proxies)[0]];
+  assert.deepEqual(p.origins, ["tgmtproxy", "radikal"]);
+  assert.equal(dependencyRatio(pool, "radikal"), 0);
+});
+
 test("links and flags", () => {
   const p = normalizeProxy(ROW, "x");
   assert.equal(tmeLink(p), `https://t.me/proxy?server=1.2.3.4&port=443&secret=${ROW.secret}`);
   assert.ok(tgLink(p).startsWith("tg://proxy?"));
   assert.equal(flag("IR"), "🇮🇷");
   assert.equal(flag(null), "🌐");
+});
+
+test("eliteKeys: strict gate first (uptime >=0.98, rtt <=250), relaxes, never below stable", () => {
+  const mk = (server, uptime, rtt_ms) => normalizeProxy({
+    server, port: 443, secret: "dd" + "b".repeat(32), type: "secure",
+    ip: server, country: "NL", rtt_ms, uptime, checks: 40,
+  }, "ours");
+  const rows = [
+    mk("elite.example.com", 0.99, 100),
+    mk("mid.example.com", 0.96, 300),
+    mk("weak.example.com", 0.92, 120),
+    mk("slow.example.com", 0.99, 900),
+  ];
+  const pool = buildPool(rows);
+  // min=1: the strict gate alone decides -> only the elite row qualifies.
+  assert.deepEqual(eliteKeys(pool, 1).map((k) => pool.proxies[k].server), ["elite.example.com"]);
+  // min unreachable: falls back to the whole stable tier (all three stable rows, pool order).
+  const all = eliteKeys(pool, 99);
+  assert.equal(all.length, pool.tiers.stable.length);
+  assert.ok(all.includes(pool.proxies[Object.keys(pool.proxies).find((k) => pool.proxies[k].server === "weak.example.com")]?.key ?? ""));
 });

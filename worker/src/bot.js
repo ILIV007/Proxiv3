@@ -4,7 +4,7 @@
 // UI language: English by design (Iliya's call, 2026-11-03 — the bot sends
 // little text, and proxy channels are an English-format world).
 
-import { flag, tmeLink, dependencyRatio, flagStyle } from "./pool.js";
+import { flag, tmeLink, dependencyRatio, flagStyle, eliteKeys } from "./pool.js";
 import { tgApi, sendMessage, editMessageText, answerCallback } from "./telegram.js";
 import { syncPool } from "./sync.js";
 
@@ -128,6 +128,7 @@ async function serve(env, chatId, uid, scope) {
   let keys;
   if (scope.startsWith("c:")) keys = pool.countries[scope.slice(2)] ?? [];
   else if (scope === "all") keys = Object.keys(pool.proxies);
+  else if (scope === "stable") keys = eliteKeys(pool);
   else keys = pool.tiers[scope] ?? [];
   const key = await pickKey(env, uid, keys);
   if (!key) return sendMessage(env, chatId, "No proxies in this category right now — try another one.", { reply_markup: mainKeyboard() });

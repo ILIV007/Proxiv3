@@ -100,6 +100,24 @@ export function buildPool(proxies, { stableKeys = null, updatedUnix = 0, source 
   };
 }
 
+// The elite set: what channel posts (and the bot's "Most stable") draw
+// from. Iliya's live report (2026-11-03): ~half of the stable tier did
+// not answer from Iran, so posting gates are much stricter than the
+// stable tier's (uptime ≥0.98 and RTT ≤250 ms; pool order preserved,
+// so a country's head is still its best). Relaxes in steps when the
+// pool is too small, and never returns less than the stable tier.
+export function eliteKeys(pool, min = 100) {
+  const P = pool?.proxies ?? {};
+  const stable = pool?.tiers?.stable ?? [];
+  const pick = (up, rtt) =>
+    stable.filter((k) => (P[k]?.uptime ?? 0) >= up && (P[k]?.rtt_ms ?? 1e9) <= rtt);
+  const a = pick(0.98, 250);
+  if (a.length >= min) return a;
+  const b = pick(0.95, 400);
+  if (b.length >= min) return b;
+  return stable;
+}
+
 // Validate an incoming tgpool/1 feed (the /sync trust boundary).
 export function validateFeed(body) {
   if (!body || body.schema !== FEED_SCHEMA || !Array.isArray(body.proxies)) return null;

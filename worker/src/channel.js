@@ -9,7 +9,7 @@
 // styles — blue/green/red — so each flag maps to its closest).
 // Runs on the existing */5 cron, throttled by CHANNEL_POST_MINUTES.
 
-import { flag, tmeLink, flagStyle } from "./pool.js";
+import { flag, tmeLink, flagStyle, eliteKeys } from "./pool.js";
 import { sendMessage } from "./telegram.js";
 import { getPool } from "./bot.js";
 
@@ -62,7 +62,8 @@ export function channelKeyboard(input) {
 // next country after the cursor's, preferring one that can fill the
 // post; a country too small posts what it has.
 export function pickForChannel(pool, cursorKey, count = 2) {
-  const keys = pool.tiers.stable?.length ? pool.tiers.stable
+  const elite = eliteKeys(pool);
+  const keys = elite.length ? elite
     : pool.tiers.fast?.length ? pool.tiers.fast
     : Object.keys(pool.proxies);
   if (!keys.length) return { keys: [], nextCursor: cursorKey ?? null };
