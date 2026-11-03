@@ -31,7 +31,7 @@ test("one proxy per post: bold labels, code values, italic tagline, jellyfish bl
   assert.equal(text,
     `<b>Proxy MTProto</b> 🇩🇪\n<i>Verified free proxy</i>\n\n` +
     `<b>Server:</b> <code>${p.server}</code>\n<b>Port:</b> <code>443</code>\n<b>Secret:</b> <code>${p.secret}</code>\n\n` +
-    `<blockquote>@Proxiv3 🪼</blockquote>`);
+    `<blockquote>🪼 @Proxiv3</blockquote>`);
   assert.equal((text.match(/Proxy MTProto/g) || []).length, 1);
 });
 
@@ -79,7 +79,7 @@ test("maybePostToChannel posts a single proxy, then throttles", async () => {
   assert.equal(r1.posted, true);
   const post = calls.find((c) => c.url.endsWith("/sendMessage"));
   assert.equal(String(post.body.chat_id), "-1001");
-  assert.match(post.body.text, /<blockquote>@Proxiv3 🪼<\/blockquote>$/);
+  assert.match(post.body.text, /<blockquote>🪼 @Proxiv3<\/blockquote>$/);
   assert.equal(post.body.reply_markup.inline_keyboard.length, 1);
   const r2 = await maybePostToChannel(env, now + 60000);
   assert.deepEqual(r2, { posted: false, reason: "throttled" });

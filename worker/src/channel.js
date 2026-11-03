@@ -35,7 +35,7 @@ export function channelPostText(p) {
     `<b>Port:</b> <code>${p.port}</code>`,
     `<b>Secret:</b> <code>${p.secret}</code>`,
     ``,
-    `<blockquote>@Proxiv3 🪼</blockquote>`,
+    `<blockquote>🪼 @Proxiv3</blockquote>`,
   ].join("\n");
 }
 
