@@ -38,7 +38,12 @@ test("single proxy block: bold labels, code values, italic tagline, jellyfish bl
 test("glass button color follows the flag: green and red maps, blue default", () => {
   assert.equal(flagStyle("IT"), "success");
   assert.equal(flagStyle("TR"), "danger");
-  assert.equal(flagStyle("DE"), "primary");
+  assert.equal(flagStyle("DE"), "danger");
+  assert.equal(flagStyle("NL"), "danger");
+  assert.equal(flagStyle("US"), "danger");
+  assert.equal(flagStyle("FR"), "primary");
+  assert.equal(flagStyle("FI"), "primary");
+  assert.equal(flagStyle("UZ"), "success");
   assert.equal(flagStyle(null), "primary");
   const pool = makePool(1, "IT");
   const kb = channelKeyboard([Object.values(pool.proxies)[0]]);

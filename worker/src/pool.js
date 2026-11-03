@@ -103,7 +103,16 @@ export function buildPool(proxies, { stableKeys = null, updatedUnix = 0, source 
 // Validate an incoming tgpool/1 feed (the /sync trust boundary).
 export function validateFeed(body) {
   if (!body || body.schema !== FEED_SCHEMA || !Array.isArray(body.proxies)) return null;
-  const rows = body.proxies.map((r) => normalizeProxy(r, "sync")).filter(Boolean);
+  const rows = body.proxies.map((r) => {
+    const p = normalizeProxy(r, "sync");
+    // Our own feed carries per-row origins — keep them (sanitized), they
+    // drive the dependency metric. Foreign rows fall back to ["sync"].
+    if (p && Array.isArray(r.origins)) {
+      const origins = r.origins.filter((o) => typeof o === "string" && /^[a-z0-9_-]{1,40}$/i.test(o)).slice(0, 8);
+      if (origins.length) p.origins = origins;
+    }
+    return p;
+  }).filter(Boolean);
   if (!rows.length) return null;
   return buildPool(mergeProxies(rows), {
     updatedUnix: Number.isInteger(body.updated_unix) ? body.updated_unix : Math.floor(Date.now() / 1000),
@@ -122,6 +131,33 @@ export function tgLink(p) {
 export function flag(cc) {
   if (!cc) return "🌐";
   return String.fromCodePoint(...[...cc].map((c) => 0x1f1e6 + c.charCodeAt(0) - 65));
+}
+
+// Flag-dominant-color → Telegram glass button style. Telegram offers
+// exactly three styles (primary=blue, success=green, danger=red), so
+// each flag maps by its DOMINANT color; blue-dominant flags are the
+// unlisted default. Iran is the exception (Iliya's rule): colorless.
+const FLAG_STYLE = {
+  // green-dominant
+  IT: "success", MX: "success", BR: "success", PK: "success",
+  SA: "success", NG: "success", BD: "success", DZ: "success",
+  UZ: "success", LT: "success", BG: "success", PT: "success",
+  ZA: "success", AE: "success", IQ: "success", MM: "success",
+  IN: "success",
+  // red-dominant
+  TR: "danger", CN: "danger", ES: "danger", CH: "danger", AT: "danger",
+  DK: "danger", CA: "danger", JP: "danger", NO: "danger", ID: "danger",
+  VN: "danger", MA: "danger", TN: "danger",
+  DE: "danger", NL: "danger", US: "danger", PL: "danger", LV: "danger",
+  CZ: "danger", HR: "danger", RS: "danger", LU: "danger", BE: "danger",
+  HU: "danger", AM: "danger", GE: "danger", EG: "danger", CL: "danger",
+  LA: "danger", PE: "danger", KR: "danger", SG: "danger", MY: "danger",
+  TH: "danger", BY: "danger", AF: "danger",
+};
+
+export function flagStyle(country) {
+  if (country === "IR") return undefined; // colorless, by Iliya's rule
+  return FLAG_STYLE[country] ?? "primary";
 }
 
 // share of pool whose ONLY origin is the given one — the plan's dependency metric.

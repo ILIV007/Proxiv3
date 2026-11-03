@@ -9,26 +9,11 @@
 // styles — blue/green/red — so each flag maps to its closest).
 // Runs on the existing */5 cron, throttled by CHANNEL_POST_MINUTES.
 
-import { flag, tmeLink } from "./pool.js";
+import { flag, tmeLink, flagStyle } from "./pool.js";
 import { sendMessage } from "./telegram.js";
 import { getPool } from "./bot.js";
 
-// Flag-dominant-color → Telegram glass style. Unlisted = blue (primary).
-// Iran is the exception (Iliya's rule): no flag shown, button colorless.
-const FLAG_STYLE = {
-  // green-dominant flags
-  IT: "success", MX: "success", BR: "success", PK: "success",
-  SA: "success", NG: "success", BD: "success", DZ: "success",
-  // red-dominant flags
-  TR: "danger", CN: "danger", ES: "danger", CH: "danger", AT: "danger",
-  DK: "danger", CA: "danger", JP: "danger", NO: "danger", ID: "danger",
-  VN: "danger", MA: "danger", TN: "danger",
-};
-
-export function flagStyle(country) {
-  if (country === "IR") return undefined; // colorless
-  return FLAG_STYLE[country] ?? "primary";
-}
+export { flagStyle };
 
 // Flag for display, or "" for Iran (no flag by Iliya's rule).
 export const displayFlag = (country) => (country === "IR" ? "" : flag(country));

@@ -4,7 +4,7 @@
 // UI language: English by design (Iliya's call, 2026-11-03 — the bot sends
 // little text, and proxy channels are an English-format world).
 
-import { flag, tmeLink, dependencyRatio } from "./pool.js";
+import { flag, tmeLink, dependencyRatio, flagStyle } from "./pool.js";
 import { sendMessage, editMessageText, answerCallback } from "./telegram.js";
 import { syncPool } from "./sync.js";
 
@@ -59,7 +59,8 @@ export function cardText(p) {
 
 export function cardKeyboard(p, scope, opts = {}) {
   const connect = { text: "🚀 Connect", url: tmeLink(p) };
-  if (p.country !== "IR") connect.style = "primary";
+  const style = flagStyle(p.country);
+  if (style) connect.style = style;
   const rows = [
     [connect],
     [
