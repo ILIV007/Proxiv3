@@ -72,6 +72,14 @@ test("validateFeed accepts tgpool/1 and rejects anything else", () => {
   assert.equal(validateFeed(null), null);
 });
 
+test("validateFeed preserves sanitized per-row origins from our own feed", () => {
+  const feed = { schema: FEED_SCHEMA, proxies: [{ ...ROW, origins: ["tgmtproxy", "radikal", "bad origin!", 42] }] };
+  const pool = validateFeed(feed);
+  const p = pool.proxies[Object.keys(pool.proxies)[0]];
+  assert.deepEqual(p.origins, ["tgmtproxy", "radikal"]);
+  assert.equal(dependencyRatio(pool, "radikal"), 0);
+});
+
 test("links and flags", () => {
   const p = normalizeProxy(ROW, "x");
   assert.equal(tmeLink(p), `https://t.me/proxy?server=1.2.3.4&port=443&secret=${ROW.secret}`);

@@ -1,0 +1,10 @@
+Attribution
+===========
+The modules pool/secret.py, pool/probe.py and pool/links.py in this directory
+are forks of the corresponding files from the open-source project
+"Free-Telegram-Proxy" by 0xRadikal (https://github.com/0xRadikal/Free-Telegram-Proxy),
+used under the MIT License (see LICENSE.upstream). They implement Telegram's
+MTProto proxy secret parsing and end-to-end probing, cross-checked against
+TDLib by the original author. Everything else in this pipeline — source
+registry, fetching, state, publishing and orchestration glue — is original
+Proxiv3 code, also MIT.

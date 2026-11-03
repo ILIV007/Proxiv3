@@ -103,7 +103,16 @@ export function buildPool(proxies, { stableKeys = null, updatedUnix = 0, source 
 // Validate an incoming tgpool/1 feed (the /sync trust boundary).
 export function validateFeed(body) {
   if (!body || body.schema !== FEED_SCHEMA || !Array.isArray(body.proxies)) return null;
-  const rows = body.proxies.map((r) => normalizeProxy(r, "sync")).filter(Boolean);
+  const rows = body.proxies.map((r) => {
+    const p = normalizeProxy(r, "sync");
+    // Our own feed carries per-row origins — keep them (sanitized), they
+    // drive the dependency metric. Foreign rows fall back to ["sync"].
+    if (p && Array.isArray(r.origins)) {
+      const origins = r.origins.filter((o) => typeof o === "string" && /^[a-z0-9_-]{1,40}$/i.test(o)).slice(0, 8);
+      if (origins.length) p.origins = origins;
+    }
+    return p;
+  }).filter(Boolean);
   if (!rows.length) return null;
   return buildPool(mergeProxies(rows), {
     updatedUnix: Number.isInteger(body.updated_unix) ? body.updated_unix : Math.floor(Date.now() / 1000),

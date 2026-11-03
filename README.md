@@ -19,8 +19,12 @@ docs/       Plan and notes
 ## Status
 
 🚧 Prerequisites stage — Cloudflare account + Telegram bot tokens pending (delivered via secure vault).
-✅ Phase 0 code is written and unit-tested (14/14): the Worker bot (menus, proxy cards, votes,
+✅ Phase 0 code is written and unit-tested: the Worker bot (menus, proxy cards, votes,
 admin panel with the dependency metric), the `tgpool/1` feed contract, the radikal bootstrap
 adapter behind a flag, `/sync` ingestion, and the `*/30` cron sync. Not yet deployed.
+✅ Phases 1–2 code is written and unit-tested: our own pipeline (`pipeline/`) — source registry,
+collector, MTProto prober (MIT fork, see `pipeline/NOTICE`), state/history, and a GitHub Actions
+workflow publishing the feed to the `data` branch every 30 min. End-to-end prober validation
+runs in CI (`pipeline-smoke`), because some sandboxes mangle raw TCP egress.
 
 License: MIT
