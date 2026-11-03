@@ -1,0 +1,8 @@
+.dev.vars
+.dev.vars.*
+wrangler.toml.local
+__pycache__/
+*.pyc
+node_modules/
+.wrangler/
+dist/
