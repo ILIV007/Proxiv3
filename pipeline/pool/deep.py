@@ -470,17 +470,20 @@ def find_pong(payload: bytes, st: DHState, ping_id: bytes) -> bool:
     if ctor == PONG:
         return body[4:12] == ping_id
     if ctor == MSG_CONTAINER:
+        # inner messages: msg_id(8) + seq_no(4) + bytes(4) + body
         count = struct.unpack("<i", body[4:8])[0]
         off = 8
-        for _ in range(count):
-            if off + 20 > len(body):
+        for _ in range(min(count, 64)):
+            if off + 16 > len(body):
                 break
-            ilen = struct.unpack("<i", body[off + 16:off + 20])[0]
-            inner = body[off + 20:off + 20 + ilen]
+            ilen = struct.unpack("<i", body[off + 12:off + 16])[0]
+            if ilen < 0 or off + 16 + ilen > len(body):
+                break
+            inner = body[off + 16:off + 16 + ilen]
             if len(inner) >= 12 and struct.unpack("<I", inner[0:4])[0] == PONG \
                     and inner[4:12] == ping_id:
                 return True
-            off += 20 + ilen
+            off += 16 + ilen
     return False
 
 
@@ -587,6 +590,8 @@ async def probe_deep(host: str, port: int, secret: Secret, *, dc: int = 2,
         res.error = str(e)
     except OSError as e:
         res.error = f"{type(e).__name__}@{res.level}"
+    except Exception as e:  # noqa: BLE001 — one weird proxy must never
+        res.error = f"deep:{type(e).__name__}"  # crash the whole pipeline
     finally:
         w.close()
         try:

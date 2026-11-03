@@ -176,7 +176,10 @@ def test_full_deep_handshake_simulation():
         assert struct.unpack("<I", ping_body[0:4])[0] == deep.PING
         assert ping_body[4:12] == ping_id
 
-        pong_body = struct.pack("<I", deep.PONG) + ping_id
+        # pong delivered inside a msg_container, like real DCs do
+        inner_msg = struct.pack("<q", ((srv["server_time"] + 2) << 32) | 4) + struct.pack("<i", 1) \
+            + struct.pack("<i", 12) + struct.pack("<I", deep.PONG) + ping_id
+        pong_body = struct.pack("<I", deep.MSG_CONTAINER) + struct.pack("<i", 1) + inner_msg
         pplain = salt + session + struct.pack("<q", ((srv["server_time"] + 2) << 32) | 4) \
             + struct.pack("<i", 1) + struct.pack("<i", len(pong_body)) + pong_body
         pad = 12
