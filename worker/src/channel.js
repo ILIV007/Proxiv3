@@ -111,6 +111,12 @@ export function pickPostCount(rand = Math.random()) {
   return 3;
 }
 
+// And each posting round is a small burst (Iliya's call): at least
+// 2 posts, sometimes 3, each from the next country in rotation.
+export function pickBurstCount(rand = Math.random()) {
+  return rand < 0.5 ? 2 : 3;
+}
+
 export async function maybePostToChannel(env, now = Date.now()) {
   if (!env.CHANNEL_ID || !env.POOL) return { posted: false, reason: "disabled" };
   const everyMs = Math.max(1, Number(env.CHANNEL_POST_MINUTES ?? 25)) * 60000;
@@ -118,15 +124,20 @@ export async function maybePostToChannel(env, now = Date.now()) {
   if (now - last < everyMs) return { posted: false, reason: "throttled" };
   const pool = await getPool(env);
   if (!pool?.count) return { posted: false, reason: "empty pool" };
-  const perPost = pickPostCount();
-  const cursor = await env.POOL.get("channel:cursor");
-  const { keys, nextCursor } = pickForChannel(pool, cursor, perPost);
-  if (!keys.length) return { posted: false, reason: "nothing to post" };
-  const proxies = keys.map((k) => pool.proxies[k]);
-  await sendMessage(env, env.CHANNEL_ID, channelPostText(proxies), {
-    reply_markup: channelKeyboard(proxies),
-  });
+  let cursor = await env.POOL.get("channel:cursor");
+  const sent = [];
+  for (let i = 0, burst = pickBurstCount(); i < burst; i++) {
+    const { keys, nextCursor } = pickForChannel(pool, cursor, pickPostCount());
+    if (!keys.length) break;
+    const proxies = keys.map((k) => pool.proxies[k]);
+    await sendMessage(env, env.CHANNEL_ID, channelPostText(proxies), {
+      reply_markup: channelKeyboard(proxies),
+    });
+    sent.push(keys);
+    cursor = nextCursor;
+  }
+  if (!sent.length) return { posted: false, reason: "nothing to post" };
   await env.POOL.put("channel:last", String(now));
-  await env.POOL.put("channel:cursor", nextCursor ?? "");
-  return { posted: true, keys };
+  await env.POOL.put("channel:cursor", cursor ?? "");
+  return { posted: true, posts: sent.length, keys: sent.flat() };
 }

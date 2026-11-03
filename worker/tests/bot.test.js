@@ -24,7 +24,7 @@ function makeEnv() {
     }, "ours"));
   const pool = buildPool(rows, { updatedUnix: Math.floor(Date.now() / 1000) });
   kv.m.set("pool", JSON.stringify(pool));
-  return { POOL: kv, BOT_TOKEN: "test", ADMIN_IDS: "42", PROVIDER_RADIKAL_ENABLED: "false" };
+  return { POOL: kv, BOT_TOKEN: "test", ADMIN_IDS: "42", CHANNEL_ID: "-1009", PROVIDER_RADIKAL_ENABLED: "false" };
 }
 
 const msg = (text, uid = 7) => ({ update_id: 1, message: { message_id: 1, chat: { id: 100 }, from: { id: uid }, text } });
@@ -80,4 +80,30 @@ test("/admin is owner-only and shows the dependency metric", async () => {
   await handleUpdate(makeEnv(), msg("/admin", 42));
   const send = calls.find((c) => c.url.endsWith("/sendMessage"));
   assert.match(send.body.text, /Radikal dependency: 0%/);
+});
+
+test("admin cards carry a Send-to-channel button; user cards do not", async () => {
+  calls.length = 0;
+  await handleUpdate(makeEnv(), cbq("t:stable", 7));
+  let card = calls.filter((c) => c.url.endsWith("/sendMessage")).at(-1);
+  assert.ok(!card.body.reply_markup.inline_keyboard.flat().some((b) => b.callback_data?.startsWith("pub:")));
+  calls.length = 0;
+  await handleUpdate(makeEnv(), cbq("t:stable", 42));
+  card = calls.filter((c) => c.url.endsWith("/sendMessage")).at(-1);
+  assert.ok(card.body.reply_markup.inline_keyboard.flat().some((b) => b.callback_data?.startsWith("pub:")));
+});
+
+test("pub callback posts the proxy to the channel — admins only", async () => {
+  calls.length = 0;
+  const env = makeEnv();
+  const pool = JSON.parse(env.POOL.m.get("pool"));
+  const key = Object.keys(pool.proxies)[0];
+  await handleUpdate(env, cbq(`pub:${key}`, 7)); // not admin
+  assert.ok(!calls.some((c) => c.url.endsWith("/sendMessage") && String(c.body.chat_id) === "-1009"));
+  calls.length = 0;
+  await handleUpdate(env, cbq(`pub:${key}`, 42));
+  const post = calls.find((c) => c.url.endsWith("/sendMessage") && String(c.body.chat_id) === "-1009");
+  assert.ok(post);
+  assert.match(post.body.text, /Proxy MTProto/);
+  assert.equal(env.POOL.m.get("channel:cursor"), key);
 });

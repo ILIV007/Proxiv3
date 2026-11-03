@@ -57,18 +57,19 @@ export function cardText(p) {
   ].join("\n");
 }
 
-export function cardKeyboard(p, scope) {
+export function cardKeyboard(p, scope, opts = {}) {
   const connect = { text: "🚀 Connect", url: tmeLink(p) };
   if (p.country !== "IR") connect.style = "primary";
-  return {
-    inline_keyboard: [
-      [connect],
-      [
-        { text: "⏭ Next", callback_data: `n:${scope}` },
-        { text: "🏠 Main menu", callback_data: "m" },
-      ],
+  const rows = [
+    [connect],
+    [
+      { text: "⏭ Next", callback_data: `n:${scope}` },
+      { text: "🏠 Main menu", callback_data: "m" },
     ],
-  };
+  ];
+  // Admins can push the proxy they are viewing straight to the channel.
+  if (opts.admin && opts.key) rows.push([{ text: "📮 Send to channel", callback_data: `pub:${opts.key}` }]);
+  return { inline_keyboard: rows };
 }
 
 const isAdmin = (env, uid) => (env.ADMIN_IDS ?? "").split(",").map((s) => s.trim()).includes(String(uid));
@@ -105,7 +106,7 @@ async function serve(env, chatId, uid, scope) {
   const key = await pickKey(env, uid, keys);
   if (!key) return sendMessage(env, chatId, "No proxies in this category right now — try another one.", { reply_markup: mainKeyboard() });
   const p = pool.proxies[key];
-  return sendMessage(env, chatId, cardText(p), { reply_markup: cardKeyboard(p, scope) });
+  return sendMessage(env, chatId, cardText(p), { reply_markup: cardKeyboard(p, scope, { key, admin: isAdmin(env, uid) }) });
 }
 
 export async function getPool(env) {
@@ -177,6 +178,20 @@ export async function handleUpdate(env, update, ctx) {
     if (data.startsWith("n:")) {
       await serve(env, chatId, uid, data.slice(2));
       return void (await done());
+    }
+    if (data.startsWith("pub:")) {
+      if (!isAdmin(env, uid)) return void (await done("No access", true));
+      const key = data.slice(4);
+      const pool = await getPool(env);
+      const p = pool?.proxies[key];
+      if (!p || !env.CHANNEL_ID) return void (await done("Not available", true));
+      const { channelPostText, channelKeyboard } = await import("./channel.js");
+      await sendMessage(env, env.CHANNEL_ID, channelPostText([p]), { reply_markup: channelKeyboard([p]) });
+      if (env.POOL) {
+        await env.POOL.put("channel:last", String(Date.now()));
+        await env.POOL.put("channel:cursor", key);
+      }
+      return void (await done("✅ Posted to @PROXIV3"));
     }
     if (data === "a:sync") {
       if (!isAdmin(env, uid)) return void (await done("No access", true));

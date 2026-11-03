@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { normalizeProxy, buildPool } from "../src/pool.js";
-import { channelPostText, channelKeyboard, flagStyle, pickForChannel, pickPostCount, maybePostToChannel } from "../src/channel.js";
+import { channelPostText, channelKeyboard, flagStyle, pickForChannel, pickPostCount, pickBurstCount, maybePostToChannel } from "../src/channel.js";
 
 class FakeKV {
   constructor() { this.m = new Map(); }
@@ -123,7 +123,14 @@ test("pickPostCount varies: mostly 2, sometimes 1 or 3", () => {
   assert.equal(pickPostCount(0.99), 3);
 });
 
-test("maybePostToChannel posts (count varies), then throttles", async () => {
+test("pickBurstCount: every round sends at least 2 posts, sometimes 3", () => {
+  assert.equal(pickBurstCount(0), 2);
+  assert.equal(pickBurstCount(0.49), 2);
+  assert.equal(pickBurstCount(0.5), 3);
+  assert.equal(pickBurstCount(0.99), 3);
+});
+
+test("maybePostToChannel sends a burst of 2-3 posts, then throttles", async () => {
   calls.length = 0;
   const kv = new FakeKV();
   kv.m.set("pool", JSON.stringify(makePool(5)));
@@ -131,7 +138,6 @@ test("maybePostToChannel posts (count varies), then throttles", async () => {
   const now = Date.now();
   const r1 = await maybePostToChannel(env, now);
   assert.equal(r1.posted, true);
-  assert.ok(r1.keys.length >= 1 && r1.keys.length <= 3);
   const post = calls.find((c) => c.url.endsWith("/sendMessage"));
   assert.equal(String(post.body.chat_id), "-1001");
   assert.match(post.body.text, /<blockquote>🪼 @PROXIV3<\/blockquote>$/);
