@@ -18,6 +18,9 @@ docs/       Plan and notes
 
 ## Status
 
-🚧 Prerequisites stage — Cloudflare account, Telegram bot and this repo are being wired up. No code yet beyond scaffolding.
+🚧 Prerequisites stage — Cloudflare account + Telegram bot tokens pending (delivered via secure vault).
+✅ Phase 0 code is written and unit-tested (14/14): the Worker bot (menus, proxy cards, votes,
+admin panel with the dependency metric), the `tgpool/1` feed contract, the radikal bootstrap
+adapter behind a flag, `/sync` ingestion, and the `*/30` cron sync. Not yet deployed.
 
 License: MIT

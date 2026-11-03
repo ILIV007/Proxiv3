@@ -1,0 +1,32 @@
+name = "proxiv3"
+main = "src/index.js"
+compatibility_date = "2025-01-01"
+
+# One cron pattern only (house rule). Phase 0: pool sync.
+# Phase 3 channel autopost will dispatch inside this same tick by Tehran time.
+[triggers]
+crons = ["*/5 * * * *"]
+
+[[kv_namespaces]]
+binding = "POOL"
+id = "8d1c5a85355348f0ab5589e51000f641"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "proxiv3_db"
+database_id = "cc4f7432-c673-44db-a3c2-f3d23e6e390c"
+
+[vars]
+# Bootstrap adapter for 0xRadikal/Free-Telegram-Proxy. Turn OFF ("false")
+# once our own pipeline feeds OWN_FEED_URL — see docs/PLAN_FA.md §8 Phase 2.
+PROVIDER_RADIKAL_ENABLED = "true"
+# OWN_FEED_URL = "https://raw.githubusercontent.com/ILIV007/Proxiv3/data/feed.json"
+ADMIN_IDS = "126679582,232514880"
+# @Proxiv3 channel — bot verified as administrator there on 2026-11-03.
+# Used by the channel autopost (same */5 tick, throttled below).
+CHANNEL_ID = "-1003532290946"
+CHANNEL_POST_MINUTES = "25"
+SPONSOR_TEXT = "📣 Sponsor · @ILIVIR3"
+SPONSOR_URL = "https://t.me/ILIVIR3"
+
+# Secrets (never commit): wrangler secret put BOT_TOKEN / WEBHOOK_SECRET / SYNC_SECRET
