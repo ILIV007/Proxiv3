@@ -38,7 +38,7 @@ export function mainKeyboard() {
       ],
       [{ text: "🌍 By country", callback_data: "cc" }],
       // The growth loop: every bot user sees the channel join button.
-      [{ text: "📣 Join @PROXIV3", url: "https://t.me/Proxiv3" }],
+      [{ text: "🪼 Join @PROXIV3", url: "https://t.me/Proxiv3" }],
     ],
   };
 }
