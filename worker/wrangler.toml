@@ -1,0 +1,26 @@
+name = "proxiv3"
+main = "src/index.js"
+compatibility_date = "2025-01-01"
+
+# One cron pattern only (house rule). Phase 0: pool sync.
+# Phase 3 channel autopost will dispatch inside this same tick by Tehran time.
+[triggers]
+crons = ["*/30 * * * *"]
+
+[[kv_namespaces]]
+binding = "POOL"
+id = "REPLACE_WITH_KV_ID"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "proxiv3_db"
+database_id = "REPLACE_WITH_D1_ID"
+
+[vars]
+# Bootstrap adapter for 0xRadikal/Free-Telegram-Proxy. Turn OFF ("false")
+# once our own pipeline feeds OWN_FEED_URL — see docs/PLAN_FA.md §8 Phase 2.
+PROVIDER_RADIKAL_ENABLED = "true"
+# OWN_FEED_URL = "https://raw.githubusercontent.com/ILIV007/Proxiv3/main/data/feed.json"
+ADMIN_IDS = ""
+
+# Secrets (never commit): wrangler secret put BOT_TOKEN / WEBHOOK_SECRET / SYNC_SECRET
