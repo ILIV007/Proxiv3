@@ -138,12 +138,15 @@ test("maybePostToChannel sends a burst of 2-3 posts, then throttles", async () =
   const now = Date.now();
   const r1 = await maybePostToChannel(env, now);
   assert.equal(r1.posted, true);
-  const post = calls.find((c) => c.url.endsWith("/sendMessage"));
-  assert.equal(String(post.body.chat_id), "-1001");
-  assert.match(post.body.text, /<blockquote>🪼 @PROXIV3<\/blockquote>$/);
-  assert.equal((post.body.text.match(/Proxy MTProto/g) || []).length, 1);
-  assert.equal(post.body.reply_markup.inline_keyboard.length, 1);
-  assert.equal(post.body.reply_markup.inline_keyboard[0].length, r1.keys.length);
+  assert.ok(r1.posts >= 2 && r1.posts <= 3);
+  const posts = calls.filter((c) => c.url.endsWith("/sendMessage"));
+  assert.equal(posts.length, r1.posts);
+  for (const post of posts) {
+    assert.equal(String(post.body.chat_id), "-1001");
+    assert.match(post.body.text, /<blockquote>🪼 @PROXIV3<\/blockquote>$/);
+    assert.equal((post.body.text.match(/Proxy MTProto/g) || []).length, 1);
+    assert.equal(post.body.reply_markup.inline_keyboard.length, 1);
+  }
   const r2 = await maybePostToChannel(env, now + 60000);
   assert.deepEqual(r2, { posted: false, reason: "throttled" });
 });
