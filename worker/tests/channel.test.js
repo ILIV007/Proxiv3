@@ -24,10 +24,10 @@ function makePool(n = 5, country = "DE") {
   return buildPool(rows, { updatedUnix: Math.floor(Date.now() / 1000) });
 }
 
-test("one proxy per post: bold labels, code values, italic tagline, jellyfish blockquote footer", () => {
+test("single proxy block: bold labels, code values, italic tagline, jellyfish blockquote footer", () => {
   const pool = makePool(1);
   const p = Object.values(pool.proxies)[0];
-  const text = channelPostText(p);
+  const text = channelPostText([p]);
   assert.equal(text,
     `<b>Proxy MTProto</b> 🇩🇪\n<i>Verified proxy</i>\n\n` +
     `<b>Server:</b> <code>${p.server}</code>\n<b>Port:</b> <code>443</code>\n<b>Secret:</b> <code>${p.secret}</code>\n\n` +
@@ -41,7 +41,7 @@ test("glass button color follows the flag: green and red maps, blue default", ()
   assert.equal(flagStyle("DE"), "primary");
   assert.equal(flagStyle(null), "primary");
   const pool = makePool(1, "IT");
-  const kb = channelKeyboard(Object.values(pool.proxies)[0]);
+  const kb = channelKeyboard([Object.values(pool.proxies)[0]]);
   assert.equal(kb.inline_keyboard.length, 1);
   assert.equal(kb.inline_keyboard[0][0].style, "success");
   assert.ok(kb.inline_keyboard[0][0].url.startsWith("https://t.me/proxy?"));
@@ -51,28 +51,57 @@ test("Iran proxies: no flag anywhere, colorless button", () => {
   assert.equal(flagStyle("IR"), undefined);
   const pool = makePool(1, "IR");
   const p = Object.values(pool.proxies)[0];
-  const text = channelPostText(p);
+  const text = channelPostText([p]);
   assert.ok(!text.includes("🇮🇷"));
   assert.match(text, /^<b>Proxy MTProto<\/b>\n/);
-  const kb = channelKeyboard(p);
+  const kb = channelKeyboard([p]);
   assert.equal(kb.inline_keyboard[0][0].text, "Connect");
   assert.ok(!("style" in kb.inline_keyboard[0][0]));
 });
 
-test("rotation advances one key at a time and wraps", () => {
+test("rotation: same country repeats its best pair when it is the only country", () => {
   const pool = makePool(5);
   const stable = pool.tiers.stable;
-  const a = pickForChannel(pool, null);
-  assert.equal(a.key, stable[0]);
-  const b = pickForChannel(pool, a.nextCursor);
-  assert.equal(b.key, stable[1]);
-  const last = pickForChannel(pool, stable[3]);
-  assert.equal(last.key, stable[4]);
-  const wrap = pickForChannel(pool, stable[4]);
-  assert.equal(wrap.key, stable[0]);
+  const a = pickForChannel(pool, null, 2);
+  assert.deepEqual(a.keys, [stable[0], stable[1]]);
+  const b = pickForChannel(pool, a.nextCursor, 2);
+  assert.deepEqual(b.keys, [stable[0], stable[1]]);
 });
 
-test("maybePostToChannel posts a single proxy, then throttles", async () => {
+test("rotation: countries alternate, every pick shares one flag, best first", () => {
+  const rows = [];
+  const mk = (host, country, uptime) => normalizeProxy({
+    server: host, port: 443, secret: "dd" + "b".repeat(30) + host.length, type: "secure",
+    ip: host, country, uptime, checks: 40,
+  }, "ours");
+  rows.push(mk("de-best.example.com", "DE", 0.99), mk("nl-best.example.com", "NL", 0.98),
+            mk("de-two.example.com", "DE", 0.97), mk("nl-two.example.com", "NL", 0.96),
+            mk("de-three.example.com", "DE", 0.95), mk("nl-three.example.com", "NL", 0.94));
+  const pool = buildPool(rows, { updatedUnix: Math.floor(Date.now() / 1000) });
+  const a = pickForChannel(pool, null, 2);
+  assert.equal(a.keys.length, 2);
+  assert.ok(a.keys.every((k) => pool.proxies[k].country === "DE"));
+  assert.equal(pool.proxies[a.keys[0]].server, "de-best.example.com");
+  const b = pickForChannel(pool, a.nextCursor, 2);
+  assert.ok(b.keys.every((k) => pool.proxies[k].country === "NL"));
+  assert.equal(pool.proxies[b.keys[0]].server, "nl-best.example.com");
+  const c = pickForChannel(pool, b.nextCursor, 2);
+  assert.ok(c.keys.every((k) => pool.proxies[k].country === "DE"));
+});
+
+test("two proxies per post: two blocks, tagline once, one button row with both", () => {
+  const pool = makePool(3);
+  const list = Object.values(pool.proxies).slice(0, 2);
+  const text = channelPostText(list);
+  assert.equal((text.match(/Proxy MTProto/g) || []).length, 2);
+  assert.equal((text.match(/Verified proxy/g) || []).length, 1);
+  assert.match(text, /<blockquote>🪼 @PROXIV3<\/blockquote>$/);
+  const kb = channelKeyboard(list);
+  assert.equal(kb.inline_keyboard.length, 1);
+  assert.equal(kb.inline_keyboard[0].length, 2);
+});
+
+test("maybePostToChannel posts two proxies by default, then throttles", async () => {
   calls.length = 0;
   const kv = new FakeKV();
   kv.m.set("pool", JSON.stringify(makePool(5)));
@@ -80,10 +109,13 @@ test("maybePostToChannel posts a single proxy, then throttles", async () => {
   const now = Date.now();
   const r1 = await maybePostToChannel(env, now);
   assert.equal(r1.posted, true);
+  assert.equal(r1.keys.length, 2);
   const post = calls.find((c) => c.url.endsWith("/sendMessage"));
   assert.equal(String(post.body.chat_id), "-1001");
   assert.match(post.body.text, /<blockquote>🪼 @PROXIV3<\/blockquote>$/);
+  assert.equal((post.body.text.match(/Proxy MTProto/g) || []).length, 2);
   assert.equal(post.body.reply_markup.inline_keyboard.length, 1);
+  assert.equal(post.body.reply_markup.inline_keyboard[0].length, 2);
   const r2 = await maybePostToChannel(env, now + 60000);
   assert.deepEqual(r2, { posted: false, reason: "throttled" });
 });

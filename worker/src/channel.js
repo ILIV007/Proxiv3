@@ -1,10 +1,12 @@
-// Channel autopost (Iliya's format, revised 2026-11-03 after his live
-// review): ONE proxy per post — never several crammed into one message.
-// The text shows only that main proxy, formatted: bold labels, copyable
-// code values, an italic tagline, and the footer as a blockquote ending
-// with the jellyfish. Under the post, a single glassy connect button
-// whose color follows the proxy's flag (Telegram offers exactly three
-// glass styles — blue/green/red — so each flag maps to its closest).
+// Channel autopost (Iliya's format, revised repeatedly 2026-11-03 after
+// his live reviews): a post carries CHANNEL_PROXIES_PER_POST proxies
+// (default 2), each as its own clean block — bold «Proxy MTProto» title
+// with the flag, bold Server/Port/Secret labels with copyable code
+// values, an italic tagline on the first block, and the footer as a
+// blockquote with the jellyfish first. Under the post, one glassy
+// connect button per proxy in a single row, each button's color
+// following its proxy's flag (Telegram offers exactly three glass
+// styles — blue/green/red — so each flag maps to its closest).
 // Runs on the existing */30 cron, throttled by CHANNEL_POST_MINUTES.
 
 import { flag, tmeLink } from "./pool.js";
@@ -31,39 +33,68 @@ export function flagStyle(country) {
 // Flag for display, or "" for Iran (no flag by Iliya's rule).
 export const displayFlag = (country) => (country === "IR" ? "" : flag(country));
 
-export function channelPostText(p) {
+function proxyBlock(p, withTagline) {
   const f = displayFlag(p.country);
-  return [
-    `<b>Proxy MTProto</b>${f ? ` ${f}` : ""}`,
-    `<i>Verified proxy</i>`,
-    ``,
+  const lines = [`<b>Proxy MTProto</b>${f ? ` ${f}` : ""}`];
+  if (withTagline) lines.push(`<i>Verified proxy</i>`, ``);
+  lines.push(
     `<b>Server:</b> <code>${p.server}</code>`,
     `<b>Port:</b> <code>${p.port}</code>`,
     `<b>Secret:</b> <code>${p.secret}</code>`,
-    ``,
-    `<blockquote>🪼 @PROXIV3</blockquote>`,
-  ].join("\n");
+  );
+  return lines.join("\n");
 }
 
-export function channelKeyboard(p) {
-  const f = displayFlag(p.country);
-  const btn = { text: f ? `${f} Connect` : "Connect", url: tmeLink(p) };
-  const style = flagStyle(p.country);
-  if (style) btn.style = style;
-  return { inline_keyboard: [[btn]] };
+export function channelPostText(input) {
+  const list = Array.isArray(input) ? input : [input];
+  const blocks = list.map((p, i) => proxyBlock(p, i === 0));
+  return [...blocks, `<blockquote>🪼 @PROXIV3</blockquote>`].join("\n\n");
 }
 
-// Next single key from the stable tier (fallback: fast, then everything),
-// continuing after the cursor so posts rotate instead of repeating.
-export function pickForChannel(pool, cursorKey) {
+export function channelKeyboard(input) {
+  const list = Array.isArray(input) ? input : [input];
+  const row = list.map((p) => {
+    const f = displayFlag(p.country);
+    const btn = { text: f ? `${f} Connect` : "Connect", url: tmeLink(p) };
+    const style = flagStyle(p.country);
+    if (style) btn.style = style;
+    return btn;
+  });
+  return { inline_keyboard: [row] };
+}
+
+// Pick one post's proxies from the stable tier (fallback: fast, then
+// everything). Iliya's rule: all proxies in one post share ONE flag, so
+// the pick is a single country's group; the tier order is already
+// quality-sorted (uptime desc, RTT asc), so the group's head is that
+// country's best servers. Countries rotate: each post moves to the
+// next country after the cursor's, preferring one that can fill the
+// post; a country too small posts what it has.
+export function pickForChannel(pool, cursorKey, count = 2) {
   const keys = pool.tiers.stable?.length ? pool.tiers.stable
     : pool.tiers.fast?.length ? pool.tiers.fast
     : Object.keys(pool.proxies);
-  if (!keys.length) return { key: null, nextCursor: cursorKey ?? null };
-  let start = Math.max(0, keys.indexOf(cursorKey));
-  if (cursorKey && keys[start] === cursorKey) start = (start + 1) % keys.length;
-  const key = keys[start];
-  return { key, nextCursor: key };
+  if (!keys.length) return { keys: [], nextCursor: cursorKey ?? null };
+  const groups = new Map();
+  for (const k of keys) {
+    const c = pool.proxies[k]?.country ?? "";
+    if (!groups.has(c)) groups.set(c, []);
+    groups.get(c).push(k);
+  }
+  const countries = [...groups.keys()];
+  let start = 0;
+  const cursorCountry = cursorKey ? (pool.proxies[cursorKey]?.country ?? null) : null;
+  if (cursorCountry !== null && groups.has(cursorCountry)) {
+    start = (countries.indexOf(cursorCountry) + 1) % countries.length;
+  }
+  const n = Math.max(1, count);
+  for (let i = 0; i < countries.length; i++) {
+    const g = groups.get(countries[(start + i) % countries.length]);
+    if (g.length >= n) return { keys: g.slice(0, n), nextCursor: g[n - 1] };
+  }
+  const g = groups.get(countries[start]);
+  const picked = g.slice(0, n);
+  return { keys: picked, nextCursor: picked[picked.length - 1] };
 }
 
 export async function maybePostToChannel(env, now = Date.now()) {
@@ -73,14 +104,15 @@ export async function maybePostToChannel(env, now = Date.now()) {
   if (now - last < everyMs) return { posted: false, reason: "throttled" };
   const pool = await getPool(env);
   if (!pool?.count) return { posted: false, reason: "empty pool" };
+  const perPost = Math.max(1, Math.min(3, Number(env.CHANNEL_PROXIES_PER_POST ?? 2) || 2));
   const cursor = await env.POOL.get("channel:cursor");
-  const { key, nextCursor } = pickForChannel(pool, cursor);
-  if (!key) return { posted: false, reason: "nothing to post" };
-  const p = pool.proxies[key];
-  await sendMessage(env, env.CHANNEL_ID, channelPostText(p), {
-    reply_markup: channelKeyboard(p),
+  const { keys, nextCursor } = pickForChannel(pool, cursor, perPost);
+  if (!keys.length) return { posted: false, reason: "nothing to post" };
+  const proxies = keys.map((k) => pool.proxies[k]);
+  await sendMessage(env, env.CHANNEL_ID, channelPostText(proxies), {
+    reply_markup: channelKeyboard(proxies),
   });
   await env.POOL.put("channel:last", String(now));
   await env.POOL.put("channel:cursor", nextCursor ?? "");
-  return { posted: true, key };
+  return { posted: true, keys };
 }

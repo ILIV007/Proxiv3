@@ -26,6 +26,7 @@ ADMIN_IDS = "126679582,232514880"
 # Used by the channel autopost (same */30 tick, throttled below).
 CHANNEL_ID = "-1003532290946"
 CHANNEL_POST_MINUTES = "60"
+CHANNEL_PROXIES_PER_POST = "2"
 SPONSOR_TEXT = "📣 Sponsor · @ILIVIR3"
 SPONSOR_URL = "https://t.me/ILIVIR3"
 
