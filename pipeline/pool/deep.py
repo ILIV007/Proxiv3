@@ -655,7 +655,13 @@ async def _deep_session(r, w, secret: Secret, key: bytes, dc: int, res: ProbeRes
     check_dh_gen_ok(await conn.recv_body(), st)
 
     payload, ping_id = build_ping_payload(st)
-    conn.send_packet(payload, os.urandom(16) if secret.use_random_padding else b"")
+    # No transport padding on the ENCRYPTED packet: MTG-fronted proxies
+    # (dd/ee secrets) answer a padded first encrypted packet with
+    # transport error -404 — the pad rides inside the packet length and
+    # breaks the DC's auth-key lookup. Unencrypted packets keep their
+    # padding (harmless: they carry their own length field).
+    # Live A/B (2026-11-03): pad0 -> pong on every sampled dd/ee proxy.
+    conn.send_packet(payload, b"")
     await w.drain()
     mismatch = None
     for _ in range(4):
