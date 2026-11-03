@@ -12,9 +12,10 @@ import { sendMessage } from "./telegram.js";
 import { getPool } from "./bot.js";
 
 // Flag-dominant-color → Telegram glass style. Unlisted = blue (primary).
+// Iran is the exception (Iliya's rule): no flag shown, button colorless.
 const FLAG_STYLE = {
   // green-dominant flags
-  IR: "success", IT: "success", MX: "success", BR: "success", PK: "success",
+  IT: "success", MX: "success", BR: "success", PK: "success",
   SA: "success", NG: "success", BD: "success", DZ: "success",
   // red-dominant flags
   TR: "danger", CN: "danger", ES: "danger", CH: "danger", AT: "danger",
@@ -23,12 +24,17 @@ const FLAG_STYLE = {
 };
 
 export function flagStyle(country) {
+  if (country === "IR") return undefined; // colorless
   return FLAG_STYLE[country] ?? "primary";
 }
 
+// Flag for display, or "" for Iran (no flag by Iliya's rule).
+export const displayFlag = (country) => (country === "IR" ? "" : flag(country));
+
 export function channelPostText(p) {
+  const f = displayFlag(p.country);
   return [
-    `<b>Proxy MTProto</b> ${flag(p.country)}`,
+    `<b>Proxy MTProto</b>${f ? ` ${f}` : ""}`,
     `<i>Verified free proxy</i>`,
     ``,
     `<b>Server:</b> <code>${p.server}</code>`,
@@ -40,9 +46,11 @@ export function channelPostText(p) {
 }
 
 export function channelKeyboard(p, sponsor = null) {
-  const rows = [
-    [{ text: `${flag(p.country)} Connect`, url: tmeLink(p), style: flagStyle(p.country) }],
-  ];
+  const f = displayFlag(p.country);
+  const btn = { text: f ? `${f} Connect` : "Connect", url: tmeLink(p) };
+  const style = flagStyle(p.country);
+  if (style) btn.style = style;
+  const rows = [[btn]];
   if (sponsor?.url) rows.push([{ text: sponsor.text, url: sponsor.url }]);
   return { inline_keyboard: rows };
 }

@@ -46,9 +46,11 @@ const sponsorOf = (env) =>
 
 // Minimal card (Iliya's call, 2026-11-03): no stats, no votes — just the
 // connection details in the same Server/Port/Secret shape as the channel.
+// Iran proxies show no flag and a colorless button (same rule as channel).
 export function cardText(p) {
+  const f = p.country === "IR" ? "" : flag(p.country);
   return [
-    `${flag(p.country)} <b>MTProto Proxy</b>`,
+    `${f ? `${f} ` : ""}<b>MTProto Proxy</b>`,
     ``,
     `Server: <code>${p.server}</code>`,
     `Port: ${p.port}`,
@@ -57,9 +59,11 @@ export function cardText(p) {
 }
 
 export function cardKeyboard(p, scope) {
+  const connect = { text: "🚀 Connect", url: tmeLink(p) };
+  if (p.country !== "IR") connect.style = "primary";
   return {
     inline_keyboard: [
-      [{ text: "🚀 Connect", url: tmeLink(p), style: "primary" }],
+      [connect],
       [
         { text: "⏭ Next", callback_data: `n:${scope}` },
         { text: "🏠 Main menu", callback_data: "m" },

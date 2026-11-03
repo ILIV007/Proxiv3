@@ -36,15 +36,27 @@ test("one proxy per post: bold labels, code values, italic tagline, jellyfish bl
 });
 
 test("glass button color follows the flag: green and red maps, blue default", () => {
-  assert.equal(flagStyle("IR"), "success");
+  assert.equal(flagStyle("IT"), "success");
   assert.equal(flagStyle("TR"), "danger");
   assert.equal(flagStyle("DE"), "primary");
   assert.equal(flagStyle(null), "primary");
-  const pool = makePool(1, "IR");
+  const pool = makePool(1, "IT");
   const kb = channelKeyboard(Object.values(pool.proxies)[0]);
   assert.equal(kb.inline_keyboard.length, 1);
   assert.equal(kb.inline_keyboard[0][0].style, "success");
   assert.ok(kb.inline_keyboard[0][0].url.startsWith("https://t.me/proxy?"));
+});
+
+test("Iran proxies: no flag anywhere, colorless button", () => {
+  assert.equal(flagStyle("IR"), undefined);
+  const pool = makePool(1, "IR");
+  const p = Object.values(pool.proxies)[0];
+  const text = channelPostText(p);
+  assert.ok(!text.includes("🇮🇷"));
+  assert.match(text, /^<b>Proxy MTProto<\/b>\n/);
+  const kb = channelKeyboard(p);
+  assert.equal(kb.inline_keyboard[0][0].text, "Connect");
+  assert.ok(!("style" in kb.inline_keyboard[0][0]));
 });
 
 test("sponsor row appears only when a sponsor is configured", () => {
