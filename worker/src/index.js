@@ -25,7 +25,7 @@ export default {
 
     if (request.method === "GET" && url.pathname === "/") {
       const pool = await getPool(env).catch(() => null);
-      return Response.json({ name: "Proxiv3", version: VERSION, pool: pool?.count ?? 0 });
+      return Response.json({ name: "PROXIV3", version: VERSION, pool: pool?.count ?? 0 });
     }
 
     if (request.method === "POST" && url.pathname === "/webhook") {

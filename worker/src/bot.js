@@ -5,7 +5,7 @@
 // little text, and proxy channels are an English-format world).
 
 import { flag, tmeLink, dependencyRatio, flagStyle } from "./pool.js";
-import { sendMessage, editMessageText, answerCallback } from "./telegram.js";
+import { tgApi, sendMessage, editMessageText, answerCallback } from "./telegram.js";
 import { syncPool } from "./sync.js";
 
 const WARNING =
@@ -20,8 +20,8 @@ export function poolAgeText(pool, now = Date.now()) {
 
 export function menuText(pool) {
   const head = pool
-    ? `🛡 <b>Proxiv3</b> — verified MTProto proxies\n📦 Current pool: <b>${pool.count}</b> servers · ${poolAgeText(pool)}`
-    : "🛡 <b>Proxiv3</b>\n⏳ The pool is still syncing — try again in a minute.";
+    ? `🛡 <b>PROXIV3</b> — verified MTProto proxies\n📦 Current pool: <b>${pool.count}</b> servers · ${poolAgeText(pool)}`
+    : "🛡 <b>PROXIV3</b>\n⏳ The pool is still syncing — try again in a minute.";
   return `${head}\n\n${WARNING}`;
 }
 
@@ -75,6 +75,31 @@ export function cardKeyboard(p, scope, opts = {}) {
 
 const isAdmin = (env, uid) => (env.ADMIN_IDS ?? "").split(",").map((s) => s.trim()).includes(String(uid));
 
+// Membership gate (Iliya's rule, 2026-11-03): using the bot requires
+// membership in @Proxiv3. Checked fresh on every interaction; a
+// Telegram API hiccup fails OPEN so an outage never locks everyone out.
+export async function isChannelMember(env, uid) {
+  if (!env.CHANNEL_ID) return true;
+  const m = await tgApi(env, "getChatMember", { chat_id: env.CHANNEL_ID, user_id: uid });
+  if (!m) return true;
+  if (["creator", "administrator", "member"].includes(m.status)) return true;
+  if (m.status === "restricted") return m.is_member === true;
+  return false;
+}
+
+export function joinText() {
+  return "🔒 <b>PROXIV3</b> is for members of our channel.\n\nJoin @PROXIV3 first — then tap «✅ I joined» and the proxies are yours.";
+}
+
+export function joinKeyboard() {
+  return {
+    inline_keyboard: [
+      [{ text: "🪼 Join @PROXIV3", url: "https://t.me/Proxiv3" }],
+      [{ text: "✅ I joined", callback_data: "j" }],
+    ],
+  };
+}
+
 async function rateLimited(env, uid) {
   if (!env.POOL) return false;
   const key = `rl:${uid}:${Math.floor(Date.now() / 3600000)}`;
@@ -127,6 +152,9 @@ export async function handleUpdate(env, update, ctx) {
   if (msg?.text) {
     const chatId = msg.chat.id;
     if (await rateLimited(env, uid)) return;
+    if (!isAdmin(env, uid) && !(await isChannelMember(env, uid))) {
+      return void (await sendMessage(env, chatId, joinText(), { reply_markup: joinKeyboard() }));
+    }
     if (msg.text.startsWith("/start") || msg.text.startsWith("/menu")) {
       const pool = await getPool(env);
       return void (await sendMessage(env, chatId, menuText(pool), { reply_markup: mainKeyboard() }));
@@ -136,7 +164,7 @@ export async function handleUpdate(env, update, ctx) {
       const pool = await getPool(env);
       const dep = pool ? Math.round(dependencyRatio(pool, "radikal") * 100) : "—";
       const text = pool
-        ? `🛠 <b>Proxiv3 panel</b>\n📦 Servers: ${pool.count}\n🕐 ${poolAgeText(pool)}\n🔗 Radikal dependency: ${dep}%\n📡 Feed source: ${pool.source}`
+        ? `🛠 <b>PROXIV3 panel</b>\n📦 Servers: ${pool.count}\n🕐 ${poolAgeText(pool)}\n🔗 Radikal dependency: ${dep}%\n📡 Feed source: ${pool.source}`
         : "🛠 The pool is still empty.";
       return void (await sendMessage(env, chatId, text, {
         reply_markup: { inline_keyboard: [[{ text: "🔄 Sync now", callback_data: "a:sync" }]] },
@@ -152,6 +180,18 @@ export async function handleUpdate(env, update, ctx) {
     if (await rateLimited(env, uid)) return void (await answerCallback(env, cb.id, "Slow down a bit — try again in a few minutes.", true));
     const done = async (text = "") => answerCallback(env, cb.id, text);
 
+    if (data === "j") {
+      if (isAdmin(env, uid) || (await isChannelMember(env, uid))) {
+        const pool = await getPool(env);
+        await editMessageText(env, chatId, messageId, menuText(pool), { reply_markup: mainKeyboard() });
+        return void (await done("✅ Welcome to PROXIV3"));
+      }
+      return void (await done("Not yet — join @PROXIV3 first, then tap again.", true));
+    }
+    if (!isAdmin(env, uid) && !(await isChannelMember(env, uid))) {
+      await editMessageText(env, chatId, messageId, joinText(), { reply_markup: joinKeyboard() });
+      return void (await done("Join @PROXIV3 to use the bot", true));
+    }
     if (data === "m") {
       const pool = await getPool(env);
       await editMessageText(env, chatId, messageId, menuText(pool), { reply_markup: mainKeyboard() });

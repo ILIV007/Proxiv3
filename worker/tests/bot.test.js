@@ -10,8 +10,11 @@ class FakeKV {
 }
 
 const calls = [];
+let memberStatus = "member";
 globalThis.fetch = async (url, opts) => {
   calls.push({ url: String(url), body: JSON.parse(opts.body) });
+  if (String(url).endsWith("/getChatMember"))
+    return { ok: true, status: 200, json: async () => ({ ok: true, result: { status: memberStatus } }) };
   return { ok: true, status: 200, json: async () => ({ ok: true, result: { message_id: 1 } }) };
 };
 
@@ -38,7 +41,7 @@ test("menu and card render in English with pool stats", () => {
     server: "1.1.1.1", port: 443, secret: "dd" + "a".repeat(32), type: "secure",
     ip: "1.1.1.1", country: "IR", rtt_ms: 30, uptime: 1, checks: 9,
   }, "ours")]);
-  assert.match(menuText(pool), /Proxiv3/);
+  assert.match(menuText(pool), /PROXIV3/);
   assert.match(menuText(pool), /1<\/b> servers/);
   assert.match(cardText(pool.proxies[Object.keys(pool.proxies)[0]]), /Server: <code>1\.1\.1\.1<\/code>/);
 });
@@ -106,4 +109,31 @@ test("pub callback posts the proxy to the channel — admins only", async () => 
   assert.ok(post);
   assert.match(post.body.text, /Proxy MTProto/);
   assert.equal(env.POOL.m.get("channel:cursor"), key);
+});
+
+test("membership gate: non-member /start gets the join prompt, member and admin pass", async () => {
+  memberStatus = "left";
+  try {
+    calls.length = 0;
+    await handleUpdate(makeEnv(), msg("/start"));
+    const send = calls.find((c) => c.url.endsWith("/sendMessage"));
+    assert.match(send.body.text, /Join @PROXIV3 first/);
+    assert.equal(send.body.reply_markup.inline_keyboard[1][0].callback_data, "j");
+
+    calls.length = 0;
+    await handleUpdate(makeEnv(), cbq("t:stable"));
+    const edit = calls.find((c) => c.url.endsWith("/editMessageText"));
+    assert.match(edit.body.text, /Join @PROXIV3 first/);
+    assert.ok(!calls.some((c) => c.url.endsWith("/sendMessage") && /Server:/.test(c.body.text ?? "")));
+
+    calls.length = 0;
+    await handleUpdate(makeEnv(), msg("/start", 42)); // admin bypasses
+    const adminSend = calls.find((c) => c.url.endsWith("/sendMessage"));
+    assert.match(adminSend.body.text, /Current pool/);
+  } finally { memberStatus = "member"; }
+
+  calls.length = 0;
+  await handleUpdate(makeEnv(), cbq("j"));
+  const edit = calls.find((c) => c.url.endsWith("/editMessageText"));
+  assert.match(edit.body.text, /Current pool/);
 });
