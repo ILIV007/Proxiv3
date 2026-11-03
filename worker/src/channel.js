@@ -45,18 +45,13 @@ export function channelPostText(p) {
   ].join("\n");
 }
 
-export function channelKeyboard(p, sponsor = null) {
+export function channelKeyboard(p) {
   const f = displayFlag(p.country);
   const btn = { text: f ? `${f} Connect` : "Connect", url: tmeLink(p) };
   const style = flagStyle(p.country);
   if (style) btn.style = style;
-  const rows = [[btn]];
-  if (sponsor?.url) rows.push([{ text: sponsor.text, url: sponsor.url }]);
-  return { inline_keyboard: rows };
+  return { inline_keyboard: [[btn]] };
 }
-
-export const sponsorOf = (env) =>
-  env.SPONSOR_URL ? { url: env.SPONSOR_URL, text: env.SPONSOR_TEXT ?? "📣 Sponsor" } : null;
 
 // Next single key from the stable tier (fallback: fast, then everything),
 // continuing after the cursor so posts rotate instead of repeating.
@@ -83,7 +78,7 @@ export async function maybePostToChannel(env, now = Date.now()) {
   if (!key) return { posted: false, reason: "nothing to post" };
   const p = pool.proxies[key];
   await sendMessage(env, env.CHANNEL_ID, channelPostText(p), {
-    reply_markup: channelKeyboard(p, sponsorOf(env)),
+    reply_markup: channelKeyboard(p),
   });
   await env.POOL.put("channel:last", String(now));
   await env.POOL.put("channel:cursor", nextCursor ?? "");

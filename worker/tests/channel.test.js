@@ -59,15 +59,6 @@ test("Iran proxies: no flag anywhere, colorless button", () => {
   assert.ok(!("style" in kb.inline_keyboard[0][0]));
 });
 
-test("sponsor row appears only when a sponsor is configured", () => {
-  const pool = makePool(1);
-  const p = Object.values(pool.proxies)[0];
-  const withS = channelKeyboard(p, { url: "https://t.me/ILIVIR3", text: "📣 Sponsor · @ILIVIR3" });
-  assert.equal(withS.inline_keyboard.length, 2);
-  assert.equal(withS.inline_keyboard[1][0].url, "https://t.me/ILIVIR3");
-  assert.equal(channelKeyboard(p).inline_keyboard.length, 1);
-});
-
 test("rotation advances one key at a time and wraps", () => {
   const pool = makePool(5);
   const stable = pool.tiers.stable;

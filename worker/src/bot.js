@@ -25,24 +25,21 @@ export function menuText(pool) {
   return `${head}\n\n${WARNING}`;
 }
 
-export function mainKeyboard(sponsor = null) {
-  const rows = [
-    [
-      { text: "🎲 Random proxy", callback_data: "t:all" },
-      { text: "🛡 Most stable", callback_data: "t:stable" },
+export function mainKeyboard() {
+  return {
+    inline_keyboard: [
+      [
+        { text: "🎲 Random proxy", callback_data: "t:all" },
+        { text: "🛡 Most stable", callback_data: "t:stable" },
+      ],
+      [
+        { text: "⚡ Fastest", callback_data: "t:fast" },
+        { text: "🎭 FakeTLS", callback_data: "t:faketls" },
+      ],
+      [{ text: "🌍 By country", callback_data: "cc" }],
     ],
-    [
-      { text: "⚡ Fastest", callback_data: "t:fast" },
-      { text: "🎭 FakeTLS", callback_data: "t:faketls" },
-    ],
-    [{ text: "🌍 By country", callback_data: "cc" }],
-  ];
-  if (sponsor?.url) rows.push([{ text: sponsor.text, url: sponsor.url }]);
-  return { inline_keyboard: rows };
+  };
 }
-
-const sponsorOf = (env) =>
-  env.SPONSOR_URL ? { url: env.SPONSOR_URL, text: env.SPONSOR_TEXT ?? "📣 Sponsor" } : null;
 
 // Minimal card (Iliya's call, 2026-11-03): no stats, no votes — just the
 // connection details in the same Server/Port/Secret shape as the channel.
@@ -98,13 +95,13 @@ async function pickKey(env, uid, candidateKeys) {
 
 async function serve(env, chatId, uid, scope) {
   const pool = await getPool(env);
-  if (!pool) return sendMessage(env, chatId, menuText(null), { reply_markup: mainKeyboard(sponsorOf(env)) });
+  if (!pool) return sendMessage(env, chatId, menuText(null), { reply_markup: mainKeyboard() });
   let keys;
   if (scope.startsWith("c:")) keys = pool.countries[scope.slice(2)] ?? [];
   else if (scope === "all") keys = Object.keys(pool.proxies);
   else keys = pool.tiers[scope] ?? [];
   const key = await pickKey(env, uid, keys);
-  if (!key) return sendMessage(env, chatId, "No proxies in this category right now — try another one.", { reply_markup: mainKeyboard(sponsorOf(env)) });
+  if (!key) return sendMessage(env, chatId, "No proxies in this category right now — try another one.", { reply_markup: mainKeyboard() });
   const p = pool.proxies[key];
   return sendMessage(env, chatId, cardText(p), { reply_markup: cardKeyboard(p, scope) });
 }
@@ -128,7 +125,7 @@ export async function handleUpdate(env, update, ctx) {
     if (await rateLimited(env, uid)) return;
     if (msg.text.startsWith("/start") || msg.text.startsWith("/menu")) {
       const pool = await getPool(env);
-      return void (await sendMessage(env, chatId, menuText(pool), { reply_markup: mainKeyboard(sponsorOf(env)) }));
+      return void (await sendMessage(env, chatId, menuText(pool), { reply_markup: mainKeyboard() }));
     }
     if (msg.text.startsWith("/admin")) {
       if (!isAdmin(env, uid)) return;
@@ -153,7 +150,7 @@ export async function handleUpdate(env, update, ctx) {
 
     if (data === "m") {
       const pool = await getPool(env);
-      await editMessageText(env, chatId, messageId, menuText(pool), { reply_markup: mainKeyboard(sponsorOf(env)) });
+      await editMessageText(env, chatId, messageId, menuText(pool), { reply_markup: mainKeyboard() });
       return void (await done());
     }
     if (data === "cc") {
