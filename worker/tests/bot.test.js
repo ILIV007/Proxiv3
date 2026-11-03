@@ -40,7 +40,7 @@ test("menu and card render in English with pool stats", () => {
   }, "ours")]);
   assert.match(menuText(pool), /Proxiv3/);
   assert.match(menuText(pool), /1<\/b> servers/);
-  assert.match(cardText(pool.proxies[Object.keys(pool.proxies)[0]]), /tg:\/\/proxy/);
+  assert.match(cardText(pool.proxies[Object.keys(pool.proxies)[0]]), /Server: <code>1\.1\.1\.1<\/code>/);
 });
 
 test("/start sends the main menu", async () => {
@@ -51,23 +51,18 @@ test("/start sends the main menu", async () => {
   assert.ok(send.body.reply_markup.inline_keyboard.length >= 3);
 });
 
-test("tier callback serves a proxy card with a connect button", async () => {
+test("tier callback serves a minimal proxy card: connect + next, no votes", async () => {
   calls.length = 0;
   await handleUpdate(makeEnv(), cbq("t:stable"));
   const card = calls.filter((c) => c.url.endsWith("/sendMessage")).at(-1);
   assert.ok(card);
+  assert.match(card.body.text, /Server: <code>/);
+  assert.match(card.body.text, /Secret: <code>/);
+  assert.doesNotMatch(card.body.text, /uptime|feedback|Operator/i);
   const flat = card.body.reply_markup.inline_keyboard.flat();
   assert.ok(flat.some((b) => b.url?.startsWith("https://t.me/proxy")));
-  assert.ok(flat.some((b) => b.callback_data?.startsWith("v:+:")));
-});
-
-test("vote callback without D1 is a no-crash acknowledgement", async () => {
-  calls.length = 0;
-  const env = makeEnv();
-  const pool = JSON.parse(await env.POOL.get("pool"));
-  const key = Object.keys(pool.proxies)[0];
-  await handleUpdate(env, cbq(`v:+:${key}`));
-  assert.ok(calls.some((c) => c.url.endsWith("/answerCallbackQuery")));
+  assert.ok(flat.some((b) => b.callback_data?.startsWith("n:")));
+  assert.ok(!flat.some((b) => b.callback_data?.startsWith("v:")));
 });
 
 test("empty pool: /start still answers with the syncing menu", async () => {

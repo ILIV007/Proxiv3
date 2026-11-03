@@ -4,7 +4,7 @@
 // UI language: English by design (Iliya's call, 2026-11-03 — the bot sends
 // little text, and proxy channels are an English-format world).
 
-import { flag, tmeLink, tgLink, dependencyRatio } from "./pool.js";
+import { flag, tmeLink, dependencyRatio } from "./pool.js";
 import { sendMessage, editMessageText, answerCallback } from "./telegram.js";
 import { syncPool } from "./sync.js";
 
@@ -41,34 +41,30 @@ export function mainKeyboard() {
   };
 }
 
-export function cardText(p, votes = { up: 0, down: 0 }) {
-  const lines = [
-    `${flag(p.country)} <b>MTProto Proxy</b> · ${p.country ?? "—"}`,
-    `🔐 Type: ${p.type}`,
-  ];
-  if (p.asn_org) lines.push(`🏢 Operator: ${escapeHtml(p.asn_org)}`);
-  if (p.uptime != null) lines.push(`📈 Our verified uptime: ${Math.round(p.uptime * 100)}% (${p.checks} checks)`);
-  if (p.rtt_ms != null) lines.push(`⏱ Ping from our runner: ${p.rtt_ms}ms`);
-  if (votes.up || votes.down) lines.push(`🗳 User feedback: 👍 ${votes.up} · 👎 ${votes.down}`);
-  lines.push("", `👇 Tap the button below to connect, or copy the link:`, `<code>${tgLink(p)}</code>`);
-  return lines.join("\n");
+// Minimal card (Iliya's call, 2026-11-03): no stats, no votes — just the
+// connection details in the same Server/Port/Secret shape as the channel.
+export function cardText(p) {
+  return [
+    `${flag(p.country)} <b>MTProto Proxy</b>`,
+    ``,
+    `Server: <code>${p.server}</code>`,
+    `Port: ${p.port}`,
+    `Secret: <code>${p.secret}</code>`,
+  ].join("\n");
 }
 
 export function cardKeyboard(p, scope) {
   return {
     inline_keyboard: [
-      [{ text: "🚀 Connect to proxy", url: tmeLink(p), style: "primary" }],
+      [{ text: "🚀 Connect", url: tmeLink(p), style: "primary" }],
       [
-        { text: "👍 Works", callback_data: `v:+:${p.key}` },
-        { text: "👎 Dead", callback_data: `v:-:${p.key}` },
         { text: "⏭ Next", callback_data: `n:${scope}` },
+        { text: "🏠 Main menu", callback_data: "m" },
       ],
-      [{ text: "🏠 Main menu", callback_data: "m" }],
     ],
   };
 }
 
-const escapeHtml = (s) => s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
 const isAdmin = (env, uid) => (env.ADMIN_IDS ?? "").split(",").map((s) => s.trim()).includes(String(uid));
 
 async function rateLimited(env, uid) {
@@ -93,28 +89,6 @@ async function pickKey(env, uid, candidateKeys) {
   return key;
 }
 
-async function voteCounts(env, key) {
-  if (!env.DB) return { up: 0, down: 0 };
-  try {
-    const row = await env.DB.prepare(
-      "SELECT SUM(vote=1) AS up, SUM(vote=-1) AS down FROM votes WHERE proxy_key=?"
-    ).bind(key).first();
-    return { up: row?.up ?? 0, down: row?.down ?? 0 };
-  } catch { return { up: 0, down: 0 }; }
-}
-
-async function recordVote(env, uid, key, vote) {
-  if (!env.DB) return;
-  try {
-    await env.DB.prepare(
-      "INSERT INTO votes(proxy_key,user_id,vote,ts) VALUES(?,?,?,?) ON CONFLICT(proxy_key,user_id) DO UPDATE SET vote=excluded.vote, ts=excluded.ts"
-    ).bind(key, uid, vote, Math.floor(Date.now() / 1000)).run();
-    await env.DB.prepare(
-      "INSERT INTO users(id,first_seen,last_seen) VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET last_seen=excluded.last_seen"
-    ).bind(uid, Math.floor(Date.now() / 1000), Math.floor(Date.now() / 1000)).run();
-  } catch (e) { console.error("recordVote", e.message); }
-}
-
 async function serve(env, chatId, uid, scope) {
   const pool = await getPool(env);
   if (!pool) return sendMessage(env, chatId, menuText(null), { reply_markup: mainKeyboard() });
@@ -125,7 +99,7 @@ async function serve(env, chatId, uid, scope) {
   const key = await pickKey(env, uid, keys);
   if (!key) return sendMessage(env, chatId, "No proxies in this category right now — try another one.", { reply_markup: mainKeyboard() });
   const p = pool.proxies[key];
-  return sendMessage(env, chatId, cardText(p, await voteCounts(env, key)), { reply_markup: cardKeyboard(p, scope) });
+  return sendMessage(env, chatId, cardText(p), { reply_markup: cardKeyboard(p, scope) });
 }
 
 export async function getPool(env) {
@@ -197,11 +171,6 @@ export async function handleUpdate(env, update, ctx) {
     if (data.startsWith("n:")) {
       await serve(env, chatId, uid, data.slice(2));
       return void (await done());
-    }
-    if (data.startsWith("v:")) {
-      const [, sign, key] = data.split(":");
-      await recordVote(env, uid, key, sign === "+" ? 1 : -1);
-      return void (await done(sign === "+" ? "Thanks! Noted 👍" : "Noted — try the next one 👎"));
     }
     if (data === "a:sync") {
       if (!isAdmin(env, uid)) return void (await done("No access", true));
