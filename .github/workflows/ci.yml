@@ -51,6 +51,9 @@ jobs:
       - name: Telethon vs deep cross-check
         working-directory: pipeline
         run: python telethon_xcheck.py
+      - name: Deep ping-variant diagnosis
+        working-directory: pipeline
+        run: python deep_diag.py
 
   pipeline-smoke:
     # One real end-to-end run (1 round) on GitHub's clean egress — this is
