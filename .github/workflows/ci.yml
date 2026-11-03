@@ -36,25 +36,6 @@ jobs:
         working-directory: pipeline
         run: python -m pytest tests/ -q
 
-  telethon-xcheck:
-    # Temporary diagnostic: Telethon (production MTProto client) vs our
-    # deep probe on the same public proxies. Always exits 0; read the log.
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-          cache: pip
-      - run: pip install -r pipeline/requirements.txt telethon
-      - name: Telethon vs deep cross-check
-        working-directory: pipeline
-        run: python telethon_xcheck.py
-      - name: Deep ping-variant diagnosis
-        working-directory: pipeline
-        run: python deep_diag.py
-
   pipeline-smoke:
     # One real end-to-end run (1 round) on GitHub's clean egress — this is
     # what validates the MTProto prober; some sandboxes mangle raw TCP and
