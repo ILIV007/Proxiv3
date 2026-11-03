@@ -1,0 +1,74 @@
+name: Pipeline (collect + verify + publish feed)
+
+# Runs our own collector/prober and force-pushes ONE commit to the `data`
+# branch (feed.json / proxies.json / index.json / state.json). The branch
+# never grows history. Cadence per plan D2: every 30 minutes.
+on:
+  schedule:
+    - cron: "7,37 * * * *"
+  workflow_dispatch:
+    inputs:
+      rounds:
+        description: "Probe rounds"
+        default: "3"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pipeline
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install -r pipeline/requirements.txt
+
+      - name: Previous state (data branch)
+        run: |
+          rm -rf .prev && mkdir -p .prev
+          git clone -q --depth 1 --branch data "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}" .prev 2>/dev/null || echo "no data branch yet"
+
+      - name: GeoIP cache
+        uses: actions/cache@v4
+        with:
+          path: .cache
+          key: dbip-${{ github.run_id }}
+          restore-keys: dbip-
+
+      - name: Download DB-IP Lite (country + ASN, CC BY 4.0)
+        run: |
+          mkdir -p .cache
+          ym=$(date -u +%Y-%m)
+          for kind in country asn; do
+            dest=".cache/dbip-$kind-lite.mmdb"
+            [ -s "$dest" ] && continue
+            curl -fsSL --retry 3 --max-time 120 -o /tmp/db.gz "https://download.db-ip.com/free/dbip-$kind-lite-$ym.mmdb.gz" \
+              && gunzip -c /tmp/db.gz > "$dest" || echo "::warning::DB-IP $kind unavailable — countries will be empty this run"
+          done
+
+      - name: Collect, probe, build feed
+        working-directory: pipeline
+        run: |
+          STATE_ARG=""
+          [ -f ../.prev/state.json ] && STATE_ARG="--state ../.prev/state.json"
+          python -m pool --out ../out $STATE_ARG --rounds "${{ inputs.rounds || '3' }}" --geo-dir ../.cache
+
+      - name: Publish data branch (single orphan commit)
+        run: |
+          cd out
+          git init -q -b data
+          git config user.name "proxiv3-pipeline"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          git commit -qm "pool: $(date -u +%FT%TZ) [auto]"
+          git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}" data
