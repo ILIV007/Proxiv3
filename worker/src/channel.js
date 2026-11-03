@@ -35,13 +35,13 @@ export function channelPostText(p) {
   const f = displayFlag(p.country);
   return [
     `<b>Proxy MTProto</b>${f ? ` ${f}` : ""}`,
-    `<i>Verified free proxy</i>`,
+    `<i>Verified proxy</i>`,
     ``,
     `<b>Server:</b> <code>${p.server}</code>`,
     `<b>Port:</b> <code>${p.port}</code>`,
     `<b>Secret:</b> <code>${p.secret}</code>`,
     ``,
-    `<blockquote>🪼 @Proxiv3</blockquote>`,
+    `<blockquote>🪼 @PROXIV3</blockquote>`,
   ].join("\n");
 }
 
