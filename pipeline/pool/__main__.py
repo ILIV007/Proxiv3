@@ -17,6 +17,8 @@ def main() -> None:
     ap.add_argument("--rounds", type=int, default=3)
     ap.add_argument("--gap", type=float, default=20.0)
     ap.add_argument("--timeout", type=float, default=8.0)
+    ap.add_argument("--no-deep", action="store_true",
+                    help="skip the full encrypted-session verification stage")
     ap.add_argument("--geo-dir", default=".cache", help="dir holding dbip-*.mmdb (optional)")
     a = ap.parse_args()
 
@@ -25,7 +27,8 @@ def main() -> None:
         os.path.join(a.geo_dir, "dbip-country-lite.mmdb") if os.path.isdir(a.geo_dir) else None,
         os.path.join(a.geo_dir, "dbip-asn-lite.mmdb") if os.path.isdir(a.geo_dir) else None,
     )
-    result = run(Config(rounds=a.rounds, gap=a.gap, timeout=a.timeout), state=state, geo=geo)
+    result = run(Config(rounds=a.rounds, gap=a.gap, timeout=a.timeout,
+                        deep=not a.no_deep), state=state, geo=geo)
     index = publish(result, state, a.out)
     f = index["funnel"]
     print(f"collected={f['links_collected']} unique={f['unique_links']} targets={f['targets_probed']} "

@@ -13,6 +13,7 @@ import time
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 
+from .deep import probe_deep
 from .fetch import fetch_all, merge
 from .netinfo import Geo, is_public, resolve_all
 from .probe import ProbeResult, probe
@@ -30,6 +31,8 @@ class Config:
     concurrency: int = 300
     per_ip: int = 12
     dc: int = 2
+    deep: bool = True          # full encrypted-session check after the rounds
+    deep_timeout: float = 12.0
 
 
 @dataclass
@@ -38,6 +41,7 @@ class Record:
     ip: str | None = None
     targets: list = field(default_factory=list)   # [(ip, port, Secret)]
     rounds: list = field(default_factory=list)    # [ProbeResult]
+    deep_ok: bool = False         # passed probe_deep (real encrypted pong)
     reject: str | None = None
     country: str | None = None
     asn_org: str | None = None
@@ -122,6 +126,24 @@ async def probe_records(records, cfg, prober=probe):
     return per_round_ok, total_targets
 
 
+async def deep_stage(records, cfg) -> None:
+    """One full-session probe per surviving target; a record is deep_ok
+    only if EVERY dialable address sustains the encrypted session."""
+    alive = [r for r in records if r.verified and r.targets]
+    if not alive:
+        return
+
+    async def deep_prober(ip, port, secret, dc, timeout, connect_host):
+        return await probe_deep(ip, port, secret, dc=dc,
+                                timeout=cfg.deep_timeout, connect_host=ip)
+
+    need = {_tkey(t): t for r in alive for t in r.targets}
+    res = await _probe_targets(list(need.values()), cfg, prober=deep_prober)
+    by_key = {_tkey(t): pr for t, pr in res.items()}
+    for r in alive:
+        r.deep_ok = all(by_key[_tkey(t)].extra.get("deep") for t in r.targets)
+
+
 @dataclass
 class RunResult:
     records: list
@@ -130,6 +152,7 @@ class RunResult:
     per_round_ok: list
     targets: int
     started: int
+    deep_enabled: bool = False
 
 
 def run(cfg: Config | None = None, state: State | None = None, sources=SOURCES,
@@ -162,6 +185,11 @@ def run(cfg: Config | None = None, state: State | None = None, sources=SOURCES,
     per_round_ok, n_targets = asyncio.run(probe_records(records, cfg))
     timings["probe"] = round(time.monotonic() - t, 2)
 
+    if cfg.deep:
+        t = time.monotonic()
+        asyncio.run(deep_stage(records, cfg))
+        timings["deep"] = round(time.monotonic() - t, 2)
+
     for r in records:
         if r.ip:
             r.country = geo.country(r.ip)
@@ -181,4 +209,5 @@ def run(cfg: Config | None = None, state: State | None = None, sources=SOURCES,
             state.record_source(rep.id, found[rep.id], ok[rep.id], now)
         state.prune(now)
 
-    return RunResult(records, reports, timings, per_round_ok, n_targets, started)
+    return RunResult(records, reports, timings, per_round_ok, n_targets, started,
+                     deep_enabled=cfg.deep)

@@ -12,11 +12,13 @@ from collections import Counter
 from .state import server_id
 
 
-def build_feed(records, state) -> tuple[dict, dict]:
-    """Group verified links by real server (ip, port); one row per server."""
+def build_feed(records, state, require_deep: bool = False) -> tuple[dict, dict]:
+    """Group verified links by real server (ip, port); one row per server.
+    With require_deep, a link must also have passed the full encrypted-
+    session probe (deep.py) — handshake-verified alone is not published."""
     by_server: dict[tuple, list] = {}
     for r in records:
-        if r.verified and r.ip:
+        if r.verified and r.ip and (r.deep_ok or not require_deep):
             by_server.setdefault((r.ip, r.proxy.port), []).append(r)
 
     rows, exclusive = [], Counter()
@@ -52,7 +54,8 @@ def build_feed(records, state) -> tuple[dict, dict]:
 
 def publish(result, state, out_dir: str) -> dict:
     os.makedirs(out_dir, exist_ok=True)
-    feed, exclusive = build_feed(result.records, state)
+    feed, exclusive = build_feed(result.records, state,
+                                 require_deep=getattr(result, "deep_enabled", False))
     rows = feed["proxies"]
 
     found_by_source = Counter()
@@ -76,6 +79,7 @@ def publish(result, state, out_dir: str) -> dict:
             "targets_probed": result.targets,
             "per_round_ok": result.per_round_ok,
             "verified_links": sum(1 for r in result.records if r.verified),
+            "deep_verified_links": sum(1 for r in result.records if r.verified and r.deep_ok),
             "verified_servers": len(rows),
         },
         "types": dict(Counter(r["type"] for r in rows)),
