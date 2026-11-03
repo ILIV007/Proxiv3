@@ -22,3 +22,41 @@ jobs:
       - name: Worker unit tests
         working-directory: worker
         run: npm test
+  pipeline-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r pipeline/requirements.txt pytest
+      - name: Pipeline unit tests
+        working-directory: pipeline
+        run: python -m pytest tests/ -q
+
+  pipeline-smoke:
+    # One real end-to-end run (1 round) on GitHub's clean egress — this is
+    # what validates the MTProto prober; some sandboxes mangle raw TCP and
+    # cannot. Publishes nothing.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r pipeline/requirements.txt
+      - name: Live pipeline (1 round)
+        working-directory: pipeline
+        run: python -m pool --out /tmp/out --rounds 1 --gap 0 --timeout 6
+      - name: Smoke assertion — the prober must verify a real pool
+        run: |
+          python3 - <<'EOF'
+          import json
+          i = json.load(open("/tmp/out/index.json"))
+          print(i["funnel"])
+          assert i["funnel"]["verified_servers"] >= 100, "prober verified too few servers"
+          EOF
