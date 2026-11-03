@@ -102,11 +102,12 @@ test("two proxies per post: ONE header, two spec blocks, one button row with bot
   assert.equal(kb.inline_keyboard[0].length, 2);
 });
 
-test("three proxies per post: no specs in the text, buttons carry everything", () => {
+test("three proxies per post: spec labels written EMPTY, no values, buttons carry everything", () => {
   const pool = makePool(4);
   const list = Object.values(pool.proxies).slice(0, 3);
   const text = channelPostText(list);
-  assert.ok(!text.includes("Server:"));
+  assert.ok(text.includes("<b>Server:</b>\n<b>Port:</b>\n<b>Secret:</b>"));
+  for (const p of list) assert.ok(!text.includes(p.server));
   assert.equal((text.match(/Proxy MTProto/g) || []).length, 1);
   const kb = channelKeyboard(list);
   assert.equal(kb.inline_keyboard[0].length, 3);

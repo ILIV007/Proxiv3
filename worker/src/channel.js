@@ -42,14 +42,17 @@ function specBlock(p) {
 }
 
 // One header for the whole post (title + the shared flag + tagline),
-// then one spec block per proxy. With 3+ proxies Iliya wants NO specs
-// in the text at all — it stays clean and the Connect buttons carry
-// everything needed.
+// then one spec block per proxy. With 3+ proxies Iliya wants the spec
+// labels written EMPTY — a single Server/Port/Secret block with no
+// values; the Connect buttons carry everything needed.
+const EMPTY_SPEC = `<b>Server:</b>\n<b>Port:</b>\n<b>Secret:</b>`;
+
 export function channelPostText(input) {
   const list = Array.isArray(input) ? input : [input];
   const f = displayFlag(list[0]?.country);
   const parts = [`<b>Proxy MTProto</b>${f ? ` ${f}` : ""}\n<i>Verified proxy</i>`];
-  if (list.length < 3) for (const p of list) parts.push(specBlock(p));
+  if (list.length >= 3) parts.push(EMPTY_SPEC);
+  else for (const p of list) parts.push(specBlock(p));
   parts.push(`<blockquote>🪼 @PROXIV3</blockquote>`);
   return parts.join("\n\n");
 }
