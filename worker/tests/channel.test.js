@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { normalizeProxy, buildPool } from "../src/pool.js";
-import { channelPostText, channelKeyboard, flagStyle, pickForChannel, maybePostToChannel } from "../src/channel.js";
+import { channelPostText, channelKeyboard, flagStyle, pickForChannel, pickPostCount, maybePostToChannel } from "../src/channel.js";
 
 class FakeKV {
   constructor() { this.m = new Map(); }
@@ -113,22 +113,31 @@ test("three proxies per post: spec labels written EMPTY, no values, buttons carr
   assert.equal(kb.inline_keyboard[0].length, 3);
 });
 
-test("maybePostToChannel posts two proxies by default, then throttles", async () => {
+test("pickPostCount varies: mostly 2, sometimes 1 or 3", () => {
+  assert.equal(pickPostCount(0), 1);
+  assert.equal(pickPostCount(0.24), 1);
+  assert.equal(pickPostCount(0.25), 2);
+  assert.equal(pickPostCount(0.5), 2);
+  assert.equal(pickPostCount(0.74), 2);
+  assert.equal(pickPostCount(0.75), 3);
+  assert.equal(pickPostCount(0.99), 3);
+});
+
+test("maybePostToChannel posts (count varies), then throttles", async () => {
   calls.length = 0;
   const kv = new FakeKV();
   kv.m.set("pool", JSON.stringify(makePool(5)));
-  const env = { POOL: kv, BOT_TOKEN: "test", CHANNEL_ID: "-1001", CHANNEL_POST_MINUTES: "60" };
+  const env = { POOL: kv, BOT_TOKEN: "test", CHANNEL_ID: "-1001", CHANNEL_POST_MINUTES: "30" };
   const now = Date.now();
   const r1 = await maybePostToChannel(env, now);
   assert.equal(r1.posted, true);
-  assert.equal(r1.keys.length, 2);
+  assert.ok(r1.keys.length >= 1 && r1.keys.length <= 3);
   const post = calls.find((c) => c.url.endsWith("/sendMessage"));
   assert.equal(String(post.body.chat_id), "-1001");
   assert.match(post.body.text, /<blockquote>🪼 @PROXIV3<\/blockquote>$/);
   assert.equal((post.body.text.match(/Proxy MTProto/g) || []).length, 1);
-  assert.equal((post.body.text.match(/<b>Server:<\/b>/g) || []).length, 2);
   assert.equal(post.body.reply_markup.inline_keyboard.length, 1);
-  assert.equal(post.body.reply_markup.inline_keyboard[0].length, 2);
+  assert.equal(post.body.reply_markup.inline_keyboard[0].length, r1.keys.length);
   const r2 = await maybePostToChannel(env, now + 60000);
   assert.deepEqual(r2, { posted: false, reason: "throttled" });
 });

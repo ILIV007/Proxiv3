@@ -5,7 +5,7 @@ compatibility_date = "2025-01-01"
 # One cron pattern only (house rule). Phase 0: pool sync.
 # Phase 3 channel autopost will dispatch inside this same tick by Tehran time.
 [triggers]
-crons = ["*/30 * * * *"]
+crons = ["*/5 * * * *"]
 
 [[kv_namespaces]]
 binding = "POOL"
@@ -23,10 +23,9 @@ PROVIDER_RADIKAL_ENABLED = "true"
 # OWN_FEED_URL = "https://raw.githubusercontent.com/ILIV007/Proxiv3/data/feed.json"
 ADMIN_IDS = "126679582,232514880"
 # @Proxiv3 channel — bot verified as administrator there on 2026-11-03.
-# Used by the channel autopost (same */30 tick, throttled below).
+# Used by the channel autopost (same */5 tick, throttled below).
 CHANNEL_ID = "-1003532290946"
-CHANNEL_POST_MINUTES = "60"
-CHANNEL_PROXIES_PER_POST = "2"
+CHANNEL_POST_MINUTES = "25"
 SPONSOR_TEXT = "📣 Sponsor · @ILIVIR3"
 SPONSOR_URL = "https://t.me/ILIVIR3"
 

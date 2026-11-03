@@ -7,7 +7,7 @@
 // connect button per proxy in a single row, each button's color
 // following its proxy's flag (Telegram offers exactly three glass
 // styles — blue/green/red — so each flag maps to its closest).
-// Runs on the existing */30 cron, throttled by CHANNEL_POST_MINUTES.
+// Runs on the existing */5 cron, throttled by CHANNEL_POST_MINUTES.
 
 import { flag, tmeLink } from "./pool.js";
 import { sendMessage } from "./telegram.js";
@@ -103,14 +103,22 @@ export function pickForChannel(pool, cursorKey, count = 2) {
   return { keys: picked, nextCursor: picked[picked.length - 1] };
 }
 
+// How many proxies a post carries varies (Iliya's call): mostly 2,
+// sometimes 1, sometimes 3 — drawn fresh for every post.
+export function pickPostCount(rand = Math.random()) {
+  if (rand < 0.25) return 1;
+  if (rand < 0.75) return 2;
+  return 3;
+}
+
 export async function maybePostToChannel(env, now = Date.now()) {
   if (!env.CHANNEL_ID || !env.POOL) return { posted: false, reason: "disabled" };
-  const everyMs = Math.max(1, Number(env.CHANNEL_POST_MINUTES ?? 60)) * 60000;
+  const everyMs = Math.max(1, Number(env.CHANNEL_POST_MINUTES ?? 25)) * 60000;
   const last = Number((await env.POOL.get("channel:last")) ?? 0);
   if (now - last < everyMs) return { posted: false, reason: "throttled" };
   const pool = await getPool(env);
   if (!pool?.count) return { posted: false, reason: "empty pool" };
-  const perPost = Math.max(1, Math.min(3, Number(env.CHANNEL_PROXIES_PER_POST ?? 2) || 2));
+  const perPost = pickPostCount();
   const cursor = await env.POOL.get("channel:cursor");
   const { keys, nextCursor } = pickForChannel(pool, cursor, perPost);
   if (!keys.length) return { posted: false, reason: "nothing to post" };
