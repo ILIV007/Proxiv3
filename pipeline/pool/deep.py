@@ -250,7 +250,10 @@ def tmp_key_iv(new_nonce: bytes, server_nonce: bytes) -> tuple[bytes, bytes]:
 # ---------------------------------------------------------------- DH messages
 
 RES_PQ = 0x05162463
-P_Q_INNER_DC = 0xA9F55F95
+P_Q_INNER = 0x83C95AEC  # plain variant (no dc field): the _dc variant is
+# rejected (-444) whenever the DC actually reached through the proxy is
+# not the one named — and proxies route freely. Telethon's production
+# auth flow uses this same variant; DCs accept it without a dc check.
 REQ_DH_PARAMS = 0xD712E4BE
 SERVER_DH_OK = 0xD0E8075C
 SERVER_DH_FAIL = 0x79CB045D
@@ -315,12 +318,11 @@ def build_req_dh_params(rp: ResPQ, dc: int, rnd=os.urandom) -> tuple[bytes, DHSt
     n, e = SERVER_KEYS[fp]
     new_nonce = rnd(32)
     inner = (
-        struct.pack("<I", P_Q_INNER_DC)
+        struct.pack("<I", P_Q_INNER)
         + tl_string(rp.pq_bytes)
         + tl_string(p.to_bytes((p.bit_length() + 7) // 8, "big"))
         + tl_string(q.to_bytes((q.bit_length() + 7) // 8, "big"))
         + rp.nonce + rp.server_nonce + new_nonce
-        + struct.pack("<i", dc)
     )
     encrypted = rsa_pad(inner, n, e, rnd)
     body = (
@@ -538,10 +540,10 @@ class _Conn:
 
     async def recv_body(self) -> bytes:
         msg = await self.read_packet()
+        if len(msg) == 4:  # transport error: the value is the negative code
+            raise DeepFail(f"deep:transport-error-{-struct.unpack('<i', msg)[0]}")
         if len(msg) < 20:
             raise DeepFail("deep:short-message")
-        if len(msg) == 4:
-            raise DeepFail(f"deep:transport-error-{-struct.unpack('<i', msg)[0]}")
         ln = struct.unpack("<i", msg[16:20])[0]
         return msg[20:20 + ln]
 

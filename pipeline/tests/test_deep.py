@@ -88,7 +88,7 @@ def _server_side(rp, client_req_body, n, d, server_nonce, new_nonce_holder):
     padded = plain[:192][::-1]
     assert hashlib.sha256(temp_key + padded).digest() == plain[192:224]
     inner = padded
-    assert struct.unpack("<I", inner[0:4])[0] == deep.P_Q_INNER_DC
+    assert struct.unpack("<I", inner[0:4])[0] == deep.P_Q_INNER
     o = 4
     pq_b, o = deep.parse_tl_string(inner, o)
     p2_b, o = deep.parse_tl_string(inner, o)
@@ -98,8 +98,6 @@ def _server_side(rp, client_req_body, n, d, server_nonce, new_nonce_holder):
     o += 32
     new_nonce = inner[o:o + 32]
     o += 32
-    dc = struct.unpack("<i", inner[o:o + 4])[0]
-    assert dc == 2
     new_nonce_holder.append(new_nonce)
 
     a = int.from_bytes(os.urandom(256), "big") % (DH_PRIME - 2) + 1
