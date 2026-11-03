@@ -82,12 +82,8 @@ def _server_side(rp, client_req_body, n, d, server_nonce, new_nonce_holder):
     off += 8  # fingerprint
     enc, off = deep.parse_tl_string(body, off)
     block = pow(int.from_bytes(enc, "big"), d, n).to_bytes(256, "big")
-    temp_xor, aes_enc = block[:32], block[32:]
-    temp_key = bytes(a ^ b for a, b in zip(temp_xor, hashlib.sha256(aes_enc).digest()))
-    plain = aes_ige_decrypt(aes_enc, temp_key, b"\0" * 32)
-    padded = plain[:192][::-1]
-    assert hashlib.sha256(temp_key + padded).digest() == plain[192:224]
-    inner = padded
+    # legacy padding: SHA1(inner) + inner + random tail
+    digest, inner = block[:20], block[20:]
     assert struct.unpack("<I", inner[0:4])[0] == deep.P_Q_INNER
     o = 4
     pq_b, o = deep.parse_tl_string(inner, o)
@@ -98,6 +94,7 @@ def _server_side(rp, client_req_body, n, d, server_nonce, new_nonce_holder):
     o += 32
     new_nonce = inner[o:o + 32]
     o += 32
+    assert hashlib.sha1(inner[:o]).digest() == digest
     new_nonce_holder.append(new_nonce)
 
     a = int.from_bytes(os.urandom(256), "big") % (DH_PRIME - 2) + 1

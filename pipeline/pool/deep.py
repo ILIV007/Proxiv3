@@ -240,6 +240,17 @@ def rsa_pad(data: bytes, n: int, e: int, rnd=os.urandom) -> bytes:
             return pow(int.from_bytes(block, "big"), e, n).to_bytes(256, "big")
 
 
+def rsa_encrypt_legacy(data: bytes, n: int, e: int, rnd=os.urandom) -> bytes:
+    """The legacy req_DH_params padding (SHA1(data) + data + random to
+    255 bytes, raw RSA) — what Telethon's production auth flow sends.
+    Live A/B (2026-11-03): DCs answered the spec's RSA_PAD with -404
+    through public proxies, so the deep probe uses this form."""
+    if len(data) > 235:
+        raise ValueError("data too long")
+    payload = hashlib.sha1(data).digest() + data + rnd(235 - len(data))
+    return pow(int.from_bytes(payload, "big"), e, n).to_bytes(256, "big")
+
+
 def tmp_key_iv(new_nonce: bytes, server_nonce: bytes) -> tuple[bytes, bytes]:
     a = hashlib.sha1(new_nonce + server_nonce).digest()
     b = hashlib.sha1(server_nonce + new_nonce).digest()
@@ -324,7 +335,7 @@ def build_req_dh_params(rp: ResPQ, dc: int, rnd=os.urandom) -> tuple[bytes, DHSt
         + tl_string(q.to_bytes((q.bit_length() + 7) // 8, "big"))
         + rp.nonce + rp.server_nonce + new_nonce
     )
-    encrypted = rsa_pad(inner, n, e, rnd)
+    encrypted = rsa_encrypt_legacy(inner, n, e, rnd)
     body = (
         struct.pack("<I", REQ_DH_PARAMS)
         + rp.nonce + rp.server_nonce
