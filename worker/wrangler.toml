@@ -21,7 +21,7 @@ database_id = "cc4f7432-c673-44db-a3c2-f3d23e6e390c"
 # once our own pipeline feeds OWN_FEED_URL — see docs/PLAN_FA.md §8 Phase 2.
 PROVIDER_RADIKAL_ENABLED = "true"
 # OWN_FEED_URL = "https://raw.githubusercontent.com/ILIV007/Proxiv3/data/feed.json"
-ADMIN_IDS = ""
+ADMIN_IDS = "126679582,232514880"
 # @Proxiv3 channel — bot verified as administrator there on 2026-11-03.
 # Used by the channel autopost (same */30 tick, throttled below).
 CHANNEL_ID = "-1003532290946"
