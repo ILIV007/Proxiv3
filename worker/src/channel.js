@@ -33,22 +33,25 @@ export function flagStyle(country) {
 // Flag for display, or "" for Iran (no flag by Iliya's rule).
 export const displayFlag = (country) => (country === "IR" ? "" : flag(country));
 
-function proxyBlock(p, withTagline) {
-  const f = displayFlag(p.country);
-  const lines = [`<b>Proxy MTProto</b>${f ? ` ${f}` : ""}`];
-  if (withTagline) lines.push(`<i>Verified proxy</i>`, ``);
-  lines.push(
+function specBlock(p) {
+  return [
     `<b>Server:</b> <code>${p.server}</code>`,
     `<b>Port:</b> <code>${p.port}</code>`,
     `<b>Secret:</b> <code>${p.secret}</code>`,
-  );
-  return lines.join("\n");
+  ].join("\n");
 }
 
+// One header for the whole post (title + the shared flag + tagline),
+// then one spec block per proxy. With 3+ proxies Iliya wants NO specs
+// in the text at all — it stays clean and the Connect buttons carry
+// everything needed.
 export function channelPostText(input) {
   const list = Array.isArray(input) ? input : [input];
-  const blocks = list.map((p, i) => proxyBlock(p, i === 0));
-  return [...blocks, `<blockquote>🪼 @PROXIV3</blockquote>`].join("\n\n");
+  const f = displayFlag(list[0]?.country);
+  const parts = [`<b>Proxy MTProto</b>${f ? ` ${f}` : ""}\n<i>Verified proxy</i>`];
+  if (list.length < 3) for (const p of list) parts.push(specBlock(p));
+  parts.push(`<blockquote>🪼 @PROXIV3</blockquote>`);
+  return parts.join("\n\n");
 }
 
 export function channelKeyboard(input) {

@@ -89,16 +89,27 @@ test("rotation: countries alternate, every pick shares one flag, best first", ()
   assert.ok(c.keys.every((k) => pool.proxies[k].country === "DE"));
 });
 
-test("two proxies per post: two blocks, tagline once, one button row with both", () => {
+test("two proxies per post: ONE header, two spec blocks, one button row with both", () => {
   const pool = makePool(3);
   const list = Object.values(pool.proxies).slice(0, 2);
   const text = channelPostText(list);
-  assert.equal((text.match(/Proxy MTProto/g) || []).length, 2);
+  assert.equal((text.match(/Proxy MTProto/g) || []).length, 1);
   assert.equal((text.match(/Verified proxy/g) || []).length, 1);
+  assert.equal((text.match(/<b>Server:<\/b>/g) || []).length, 2);
   assert.match(text, /<blockquote>🪼 @PROXIV3<\/blockquote>$/);
   const kb = channelKeyboard(list);
   assert.equal(kb.inline_keyboard.length, 1);
   assert.equal(kb.inline_keyboard[0].length, 2);
+});
+
+test("three proxies per post: no specs in the text, buttons carry everything", () => {
+  const pool = makePool(4);
+  const list = Object.values(pool.proxies).slice(0, 3);
+  const text = channelPostText(list);
+  assert.ok(!text.includes("Server:"));
+  assert.equal((text.match(/Proxy MTProto/g) || []).length, 1);
+  const kb = channelKeyboard(list);
+  assert.equal(kb.inline_keyboard[0].length, 3);
 });
 
 test("maybePostToChannel posts two proxies by default, then throttles", async () => {
@@ -113,7 +124,8 @@ test("maybePostToChannel posts two proxies by default, then throttles", async ()
   const post = calls.find((c) => c.url.endsWith("/sendMessage"));
   assert.equal(String(post.body.chat_id), "-1001");
   assert.match(post.body.text, /<blockquote>🪼 @PROXIV3<\/blockquote>$/);
-  assert.equal((post.body.text.match(/Proxy MTProto/g) || []).length, 2);
+  assert.equal((post.body.text.match(/Proxy MTProto/g) || []).length, 1);
+  assert.equal((post.body.text.match(/<b>Server:<\/b>/g) || []).length, 2);
   assert.equal(post.body.reply_markup.inline_keyboard.length, 1);
   assert.equal(post.body.reply_markup.inline_keyboard[0].length, 2);
   const r2 = await maybePostToChannel(env, now + 60000);
