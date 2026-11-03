@@ -451,8 +451,14 @@ def build_ping_payload(st: DHState, rnd=os.urandom) -> tuple[bytes, bytes]:
 def find_pong(payload: bytes, st: DHState, ping_id: bytes) -> bool:
     """Decrypt one server packet; True iff it carries our pong (possibly
     inside a msg_container). Other valid packets return False."""
-    if len(payload) < 24 + 32 or payload[:8] != st.auth_key_id:
-        raise DeepFail(f"deep:bad-auth-key-id:{payload[:8].hex()}:{len(payload)}")
+    if len(payload) < 24 + 32:
+        raise DeepFail(f"deep:short-packet:{len(payload)}:{payload[:16].hex()}")
+    if payload[:8] == b"\0" * 8:
+        # an unencrypted packet after the DH exchange: name its constructor
+        ctor = payload[20:24].hex() if len(payload) >= 24 else "????"
+        raise DeepFail(f"deep:unencrypted:{ctor}:{len(payload)}")
+    if payload[:8] != st.auth_key_id:
+        raise DeepFail(f"deep:bad-auth-key-id:{payload[:16].hex()}:{len(payload)}")
     msg_key = payload[8:24]
     key, iv = _msg_key_aes(st.auth_key, msg_key, 8)
     ct = payload[24:]
@@ -648,11 +654,18 @@ async def _deep_session(r, w, secret: Secret, key: bytes, dc: int, res: ProbeRes
     mismatch = None
     for _ in range(4):
         try:
-            if find_pong(await conn.read_packet(), st, ping_id):
+            # per-read budget: the outer wait_for timeout used to mask the
+            # first packet's diagnostic behind a bare timeout@dc
+            pkt = await asyncio.wait_for(conn.read_packet(), 6)
+        except (TimeoutError, asyncio.IncompleteReadError):
+            break
+        try:
+            if find_pong(pkt, st, ping_id):
                 res.extra["deep"] = True
                 return
         except DeepFail as e:
-            if mismatch is None and str(e).startswith("deep:bad-auth-key-id"):
+            if mismatch is None and str(e).startswith(
+                    ("deep:bad-auth-key-id", "deep:unencrypted", "deep:short-packet")):
                 mismatch = e  # keep scanning: the pong may be in a later packet
                 continue
             raise
