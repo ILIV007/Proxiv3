@@ -100,22 +100,66 @@ export function buildPool(proxies, { stableKeys = null, updatedUnix = 0, source 
   };
 }
 
+// FakeTLS front domain, decoded from the ee-secret (0xEE + 16-byte key
+// + raw domain bytes — the same layout the pipeline's secret.py uses).
+// Null for non-FakeTLS secrets and for domains that aren't clean ASCII.
+export function frontDomain(p) {
+  if (!p || p.type !== "faketls" || typeof p.secret !== "string") return null;
+  const hex = p.secret.toLowerCase();
+  if (!hex.startsWith("ee") || hex.length <= 34 || hex.length % 2) return null;
+  let d = "";
+  for (let i = 34; i < hex.length; i += 2) {
+    const c = parseInt(hex.slice(i, i + 2), 16);
+    if (!(c >= 0x20 && c < 0x7f)) return null;
+    d += String.fromCharCode(c);
+  }
+  d = d.toLowerCase();
+  return /^([a-z0-9-]+\.)+[a-z]{2,}$/.test(d) ? d : null;
+}
+
+// Fronts that live on major CDN / platform infrastructure. A FakeTLS
+// proxy wearing one of these as its SNI survives ISP filtering far
+// better (the Aether doctrine: a ubiquitous, whitelist-friendly SNI on
+// anycast IPs) — Iliya approved prioritizing them in the ranking.
+const CDN_FRONTS = [
+  "cloudflare.com", "google.com", "googleapis.com", "gstatic.com",
+  "youtube.com", "amazonaws.com", "cloudfront.net", "amazon.com",
+  "azure.com", "microsoft.com", "office.com", "office365.com",
+  "windows.com", "bing.com", "akamai.net", "akamaized.net",
+  "akamaiedge.net", "fastly.net", "apple.com", "icloud.com",
+  "facebook.com", "instagram.com", "whatsapp.com", "telegram.org",
+  "wikipedia.org", "github.com", "gitlab.com", "mozilla.org",
+];
+
+export function isCdnFront(domain) {
+  if (!domain) return false;
+  return CDN_FRONTS.some((d) => domain === d || domain.endsWith(`.${d}`));
+}
+
 // The elite set: what channel posts (and the bot's "Most stable") draw
 // from. Iliya's live report (2026-11-03): ~half of the stable tier did
 // not answer from Iran, so posting gates are much stricter than the
 // stable tier's (uptime ≥0.98 and RTT ≤250 ms; pool order preserved,
 // so a country's head is still its best). Relaxes in steps when the
 // pool is too small, and never returns less than the stable tier.
+// Within the chosen gate, FakeTLS proxies fronted by a major CDN go
+// first (stable partition — relative quality order is preserved).
 export function eliteKeys(pool, min = 100) {
   const P = pool?.proxies ?? {};
   const stable = pool?.tiers?.stable ?? [];
   const pick = (up, rtt) =>
     stable.filter((k) => (P[k]?.uptime ?? 0) >= up && (P[k]?.rtt_ms ?? 1e9) <= rtt);
+  const boost = (keys) => {
+    const fronted = keys.filter((k) => isCdnFront(frontDomain(P[k])));
+    if (!fronted.length) return keys;
+    const rest = keys.filter((k) => !fronted.includes(k));
+    return [...fronted, ...rest];
+  };
   const a = pick(0.98, 250);
-  if (a.length >= min) return a;
+  if (a.length >= min) return boost(a);
   const b = pick(0.95, 400);
-  if (b.length >= min) return b;
-  return stable;
+  if (b.length >= min) return boost(b);
+  return boost(stable);
 }
 
 // Validate an incoming tgpool/1 feed (the /sync trust boundary).

@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   normalizeProxy, fromRadikal, mergeProxies, buildPool, validateFeed,
-  tmeLink, tgLink, flag, proxyKey, dependencyRatio, FEED_SCHEMA, eliteKeys,
+  tmeLink, tgLink, flag, proxyKey, dependencyRatio, FEED_SCHEMA, eliteKeys, frontDomain, isCdnFront,
 } from "../src/pool.js";
 
 const ROW = {
@@ -106,4 +106,35 @@ test("eliteKeys: strict gate first (uptime >=0.98, rtt <=250), relaxes, never be
   const all = eliteKeys(pool, 99);
   assert.equal(all.length, pool.tiers.stable.length);
   assert.ok(all.includes(pool.proxies[Object.keys(pool.proxies).find((k) => pool.proxies[k].server === "weak.example.com")]?.key ?? ""));
+});
+
+test("frontDomain decodes the ee-secret SNI; CDN fronts are recognised", () => {
+  const hex = (s) => [...s].map((c) => c.charCodeAt(0).toString(16).padStart(2, "0")).join("");
+  const ee = (domain) => normalizeProxy({
+    server: "f.example.com", port: 443, secret: "ee" + "ab".repeat(16) + hex(domain), type: "faketls",
+    ip: "f.example.com", country: "NL", rtt_ms: 90, uptime: 0.99, checks: 40,
+  }, "ours");
+  assert.equal(frontDomain(ee("www.cloudflare.com")), "www.cloudflare.com");
+  assert.equal(frontDomain(ee("cdn.random-site.example.org")), "cdn.random-site.example.org");
+  assert.equal(isCdnFront("www.cloudflare.com"), true);
+  assert.equal(isCdnFront("deep.sub.googleapis.com"), true);
+  assert.equal(isCdnFront("cdn.random-site.example.org"), false);
+  assert.equal(isCdnFront(frontDomain(ee("not-a-domain"))), false);
+  const dd = normalizeProxy({
+    server: "s.example.com", port: 443, secret: "dd" + "ab".repeat(16), type: "secure",
+    ip: "s.example.com", country: "NL", rtt_ms: 90, uptime: 0.99, checks: 40,
+  }, "ours");
+  assert.equal(frontDomain(dd), null);
+});
+
+test("eliteKeys boosts CDN-fronted FakeTLS to the front, keeping quality order otherwise", () => {
+  const hex = (s) => [...s].map((c) => c.charCodeAt(0).toString(16).padStart(2, "0")).join("");
+  const mk = (server, secret, type) => normalizeProxy({
+    server, port: 443, secret, type, ip: server, country: "NL", rtt_ms: 100, uptime: 0.99, checks: 40,
+  }, "ours");
+  const plain = mk("plain.example.com", "dd" + "ab".repeat(16), "secure");
+  const fronted = mk("fronted.example.com", "ee" + "cd".repeat(16) + hex("www.google.com"), "faketls");
+  const pool = buildPool([plain, fronted]); // plain sorts first (same stats, stable order)
+  const elite = eliteKeys(pool, 1).map((k) => pool.proxies[k].server);
+  assert.deepEqual(elite, ["fronted.example.com", "plain.example.com"]);
 });
