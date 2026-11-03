@@ -32,7 +32,7 @@ class Config:
     per_ip: int = 12
     dc: int = 2
     deep: bool = True          # full encrypted-session check after the rounds
-    deep_timeout: float = 12.0
+    deep_timeout: float = 20.0
 
 
 @dataclass

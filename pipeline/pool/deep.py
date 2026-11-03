@@ -452,7 +452,7 @@ def find_pong(payload: bytes, st: DHState, ping_id: bytes) -> bool:
     """Decrypt one server packet; True iff it carries our pong (possibly
     inside a msg_container). Other valid packets return False."""
     if len(payload) < 24 + 32 or payload[:8] != st.auth_key_id:
-        raise DeepFail("deep:bad-auth-key-id")
+        raise DeepFail(f"deep:bad-auth-key-id:{payload[:8].hex()}:{len(payload)}")
     msg_key = payload[8:24]
     key, iv = _msg_key_aes(st.auth_key, msg_key, 8)
     ct = payload[24:]
@@ -645,8 +645,17 @@ async def _deep_session(r, w, secret: Secret, key: bytes, dc: int, res: ProbeRes
     payload, ping_id = build_ping_payload(st)
     conn.send_packet(payload, os.urandom(16) if secret.use_random_padding else b"")
     await w.drain()
+    mismatch = None
     for _ in range(4):
-        if find_pong(await conn.read_packet(), st, ping_id):
-            res.extra["deep"] = True
-            return
+        try:
+            if find_pong(await conn.read_packet(), st, ping_id):
+                res.extra["deep"] = True
+                return
+        except DeepFail as e:
+            if mismatch is None and str(e).startswith("deep:bad-auth-key-id"):
+                mismatch = e  # keep scanning: the pong may be in a later packet
+                continue
+            raise
+    if mismatch is not None:
+        raise mismatch
     raise DeepFail("deep:no-pong")
