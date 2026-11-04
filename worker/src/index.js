@@ -1,13 +1,11 @@
 // Proxiv3 worker entry: webhook + /sync + one cron (*/30).
 // Phase 0 (see docs/PLAN_FA.md). No runtime dependencies.
 
-import { handleUpdate, getPool } from "./bot.js";
+import { handleUpdate } from "./bot.js";
 import { syncPool } from "./sync.js";
 import { validateFeed } from "./pool.js";
 import { maybePostToChannel } from "./channel.js";
 import { maybeDispatchPipeline } from "./trigger.js";
-
-const VERSION = "0.1.0";
 
 // D1 dedupe when bound (KV writes are too precious on the free tier).
 async function firstTime(env, updateId) {
@@ -25,8 +23,9 @@ export default {
     const url = new URL(request.url);
 
     if (request.method === "GET" && url.pathname === "/") {
-      const pool = await getPool(env).catch(() => null);
-      return Response.json({ name: "PROXIV3", version: VERSION, pool: pool?.count ?? 0 });
+      // Deliberately bland: the public surface says nothing about what
+      // this service does or how much data it holds.
+      return new Response("ok");
     }
 
     if (request.method === "POST" && url.pathname === "/webhook") {
