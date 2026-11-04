@@ -5,6 +5,7 @@ import { handleUpdate, getPool } from "./bot.js";
 import { syncPool } from "./sync.js";
 import { validateFeed } from "./pool.js";
 import { maybePostToChannel } from "./channel.js";
+import { maybeDispatchPipeline } from "./trigger.js";
 
 const VERSION = "0.1.0";
 
@@ -60,6 +61,11 @@ export default {
       syncPool(env)
         .then(() => maybePostToChannel(env))
         .catch((e) => console.error("scheduled", e.message))
+    );
+    // Independent of the sync/post chain and fail-soft: keep the
+    // pipeline running on OUR cron, not GitHub's flaky schedule.
+    ctx.waitUntil(
+      maybeDispatchPipeline(env).catch((e) => console.error("dispatch", e.message))
     );
   },
 };
