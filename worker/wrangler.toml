@@ -25,7 +25,7 @@ ADMIN_IDS = "126679582,232514880"
 # @Proxiv3 channel — bot verified as administrator there on 2026-11-03.
 # Used by the channel autopost (same */5 tick, throttled below).
 CHANNEL_ID = "-1003532290946"
-CHANNEL_POST_MINUTES = "25"
+CHANNEL_POST_MINUTES = "20"
 SPONSOR_TEXT = "📣 Sponsor · @ILIVIR3"
 SPONSOR_URL = "https://t.me/ILIVIR3"
 
