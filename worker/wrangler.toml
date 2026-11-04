@@ -1,4 +1,4 @@
-name = "proxiv3"
+name = "iliv-core"
 main = "src/index.js"
 compatibility_date = "2025-01-01"
 
