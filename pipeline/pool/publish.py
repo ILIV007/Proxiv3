@@ -11,6 +11,23 @@ from collections import Counter
 
 from .state import server_id
 
+# Weak-run publish guard: a run whose deep-verification rate collapsed
+# (bad runner egress, a source outage) must not shrink a healthy published
+# feed. Healthy runs (2026-11-04): deep rate ~0.95+, count ratio ~0.9+;
+# weak runs: deep 0.51–0.59, count ratio 0.53–0.64. A count collapse with
+# a HEALTHY deep rate is a genuine source shrink and still publishes.
+GUARD_MIN_PREV = 100      # baseline too small to judge against
+GUARD_MIN_RATIO = 0.7     # new feed must keep >= 70% of previous servers
+GUARD_DEEP_RATE = 0.8     # deep rate under this = the run itself failed
+
+
+def weak_run(new_count: int, prev_count: int, deep_rate: float | None) -> bool:
+    if prev_count < GUARD_MIN_PREV:
+        return False
+    if new_count >= GUARD_MIN_RATIO * prev_count:
+        return False
+    return deep_rate is None or deep_rate < GUARD_DEEP_RATE
+
 
 def build_feed(records, state, require_deep: bool = False) -> tuple[dict, dict]:
     """Group verified links by real server (ip, port); one row per server.
@@ -52,7 +69,7 @@ def build_feed(records, state, require_deep: bool = False) -> tuple[dict, dict]:
     return feed, exclusive
 
 
-def publish(result, state, out_dir: str) -> dict:
+def publish(result, state, out_dir: str, prev_feed_path: str | None = None) -> dict:
     os.makedirs(out_dir, exist_ok=True)
     feed, exclusive = build_feed(result.records, state,
                                  require_deep=getattr(result, "deep_enabled", False))
@@ -69,6 +86,30 @@ def publish(result, state, out_dir: str) -> dict:
         "exclusive_verified_servers": exclusive[rep.id],
     } for rep in result.reports]
 
+    verified_links = sum(1 for r in result.records if r.verified)
+    deep_links = sum(1 for r in result.records if r.verified and r.deep_ok)
+    deep_rate = (deep_links / verified_links) if (
+        getattr(result, "deep_enabled", False) and verified_links) else None
+
+    guard = {"tripped": False}
+    prev_feed = None
+    if prev_feed_path and os.path.isfile(prev_feed_path):
+        try:
+            with open(prev_feed_path, encoding="utf-8") as f:
+                prev_feed = json.load(f)
+        except (OSError, ValueError):
+            prev_feed = None
+    if prev_feed is not None:
+        prev_count = len(prev_feed.get("proxies", []))
+        guard = {
+            "tripped": weak_run(len(rows), prev_count, deep_rate),
+            "prev_servers": prev_count,
+            "new_servers": len(rows),
+            "deep_rate": round(deep_rate, 4) if deep_rate is not None else None,
+        }
+        if guard["tripped"]:
+            guard["kept_feed_updated_unix"] = prev_feed.get("updated_unix")
+
     dep = (exclusive["radikal"] / len(rows)) if rows else 0.0
     index = {
         "updated_unix": feed["updated_unix"],
@@ -78,8 +119,8 @@ def publish(result, state, out_dir: str) -> dict:
             "unique_links": len(result.records),
             "targets_probed": result.targets,
             "per_round_ok": result.per_round_ok,
-            "verified_links": sum(1 for r in result.records if r.verified),
-            "deep_verified_links": sum(1 for r in result.records if r.verified and r.deep_ok),
+            "verified_links": verified_links,
+            "deep_verified_links": deep_links,
             "deep_errors": getattr(result, "deep_errors", {}),
             "verified_servers": len(rows),
         },
@@ -87,9 +128,17 @@ def publish(result, state, out_dir: str) -> dict:
         "countries": dict(Counter(r["country"] for r in rows if r["country"])),
         "dependency_radikal": round(dep, 4),
         "sources": sources,
+        "guard": guard,
     }
 
-    for name, obj in (("feed.json", feed), ("proxies.json", rows), ("index.json", index)):
+    outputs = (("feed.json", feed), ("proxies.json", rows), ("index.json", index))
+    if guard["tripped"]:
+        # Weak run: the last good feed stays live. index.json above still
+        # reports this run's funnel, so the collapse stays visible.
+        outputs = (("feed.json", prev_feed),
+                   ("proxies.json", prev_feed["proxies"]),
+                   ("index.json", index))
+    for name, obj in outputs:
         with open(os.path.join(out_dir, name), "w", encoding="utf-8") as f:
             json.dump(obj, f, ensure_ascii=False, separators=(",", ":"))
     if state is not None:

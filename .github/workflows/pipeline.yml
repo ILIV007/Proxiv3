@@ -61,7 +61,9 @@ jobs:
         run: |
           STATE_ARG=""
           [ -f ../.prev/state.json ] && STATE_ARG="--state ../.prev/state.json"
-          python -m pool --out ../out $STATE_ARG --rounds "${{ inputs.rounds || '3' }}" --geo-dir ../.cache
+          PREV_ARG=""
+          [ -f ../.prev/feed.json ] && PREV_ARG="--prev-feed ../.prev/feed.json"
+          python -m pool --out ../out $STATE_ARG $PREV_ARG --rounds "${{ inputs.rounds || '3' }}" --geo-dir ../.cache
 
       - name: Publish data branch (single orphan commit)
         run: |

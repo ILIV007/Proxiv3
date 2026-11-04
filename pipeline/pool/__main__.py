@@ -14,6 +14,8 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", required=True)
     ap.add_argument("--state", default=None, help="previous state.json (read + republished)")
+    ap.add_argument("--prev-feed", default=None,
+                    help="previous published feed.json (weak-run guard baseline)")
     ap.add_argument("--rounds", type=int, default=3)
     ap.add_argument("--gap", type=float, default=20.0)
     ap.add_argument("--timeout", type=float, default=8.0)
@@ -29,7 +31,11 @@ def main() -> None:
     )
     result = run(Config(rounds=a.rounds, gap=a.gap, timeout=a.timeout,
                         deep=not a.no_deep), state=state, geo=geo)
-    index = publish(result, state, a.out)
+    index = publish(result, state, a.out, prev_feed_path=a.prev_feed)
+    g = index.get("guard", {})
+    if g.get("tripped"):
+        print(f"GUARD TRIPPED: weak run — kept previous feed "
+              f"(prev={g['prev_servers']} new={g['new_servers']} deep_rate={g['deep_rate']})")
     f = index["funnel"]
     print(f"collected={f['links_collected']} unique={f['unique_links']} targets={f['targets_probed']} "
           f"verified_links={f['verified_links']} servers={f['verified_servers']} "
