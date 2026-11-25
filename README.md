@@ -20,4 +20,8 @@ docs/       Plan and notes
 
 ✅ Live — bot [@Prox_IVbot](https://t.me/Prox_IVbot) and channel [@Proxiv3](https://t.me/Proxiv3) are running on a single Cloudflare Worker (free plan) + KV + D1. Our own collector + MTProto verifier pipeline runs on GitHub Actions and publishes the pool every 30 minutes; the bot serves only our own verified feed.
 
+## Related project
+
+[MeridianFeed](https://github.com/ILIV007/MeridianFeed) is the V2Ray complement to Proxiv3's MTProto system. Proxiv3 distributes and verifies MTProto proxies; MeridianFeed provides the verified V2Ray side for the same @PROXIV3 channel.
+
 License: MIT
